@@ -1,11 +1,16 @@
 package org.springboot.troubleticketapi.entity;
 
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Table(name = "trouble_tickets")
 @Entity
+@Getter
+@NoArgsConstructor
 public class TroubleTicket {
 
     @Id
@@ -26,6 +31,36 @@ public class TroubleTicket {
     @Column(nullable = false, length = 20)
     private TroubleTicketStatus status;
 
-    private List<Note> notes;
+    @OneToMany(
+        mappedBy = "troubleTicket",
+        cascade = CascadeType.ALL,
+        orphanRemoval = true
+    )
+    private List<Note> notes = new ArrayList<>();
 
+
+    public TroubleTicket(
+            String id,
+            String tenantId,
+            String externalId,
+            int serviceId,
+            String description,
+            TroubleTicketStatus status
+    ) {
+        this.id = id;
+        this.tenantId = tenantId;
+        this.externalId = externalId;
+        this.serviceId = serviceId;
+        this.description = description;
+        this.status = status;
+    }
+
+    public void addNote(String text) {
+        Note note = new Note(text, this);
+        notes.add(note);
+    }
+
+    public void close() {
+        this.status = TroubleTicketStatus.CLOSED;
+    }
 }
