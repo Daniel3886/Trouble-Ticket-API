@@ -1,9 +1,15 @@
 services:
   postgres:
-    image: 'postgres:latest'
+    image: postgres:17
+    container_name: trouble-ticket-postgres
     environment:
-      - 'POSTGRES_DB=mydatabase'
-      - 'POSTGRES_PASSWORD=secret'
-      - 'POSTGRES_USER=myuser'
+      POSTGRES_DB: ${POSTGRES_DB:-trouble_ticket}
+      POSTGRES_USER: ${POSTGRES_USER:-ticket_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local_dev_password}
     ports:
-      - '5432'
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

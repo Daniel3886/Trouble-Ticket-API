@@ -1,3 +1,15 @@
 spring:
   application:
     name: TroubleTicketApi
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/trouble_ticket}
+    username: ${POSTGRES_USER:ticket_user}
+    password: ${POSTGRES_PASSWORD:local_dev_password}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    open-in-view: false
