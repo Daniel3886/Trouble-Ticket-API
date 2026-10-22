@@ -24,4 +24,16 @@ public class Note {
     @Column(nullable = false, updatable = false)
     private Instant date;
 
+    @ManyToOne(
+            fetch = FetchType.LAZY, optional = false
+    )
+    @JoinColumn(name = "trouble_ticket_id", nullable = false)
+    private TroubleTicket troubleTicket;
+
+    public Note(String text, TroubleTicket troubleTicket) {
+        this.id = UUID.randomUUID().toString();
+        this.text = text;
+        this.date = Instant.now();
+        this.troubleTicket = troubleTicket;
+    }
 }
