@@ -13,7 +13,7 @@ public record CreateTroubleTicketRequest(
 
         @NotNull
         @Positive
-        Long serviceId,
+        int serviceId,
 
         @NotBlank
         @Length(min = 1, max = 5000, message = "Description must be between 1 and 5000 characters")

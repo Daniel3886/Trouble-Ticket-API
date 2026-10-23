@@ -10,6 +10,7 @@ import java.util.List;
 @Table(name = "trouble_tickets")
 @Entity
 @Getter
+@Setter
 @NoArgsConstructor
 public class TroubleTicket {
 
