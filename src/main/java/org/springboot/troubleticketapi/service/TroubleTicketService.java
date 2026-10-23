@@ -25,6 +25,10 @@ public class TroubleTicketService {
     public TroubleTicketResponse createTroubleTicket(
             @Valid CreateTroubleTicketRequest request) {
 
+        if(!"new".equals(request.status())){
+            throw new IllegalArgumentException("New tickets must have status 'new'");
+        }
+
         TroubleTicket troubleTicket = new TroubleTicket();
 
         troubleTicket.setExternalId(request.externalId());
