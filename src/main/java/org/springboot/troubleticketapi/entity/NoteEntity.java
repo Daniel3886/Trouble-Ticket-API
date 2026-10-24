@@ -12,7 +12,7 @@ import java.util.UUID;
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
-public class Note {
+public class NoteEntity {
 
     @Id
     @Column(nullable = false, updatable = false)
@@ -28,9 +28,9 @@ public class Note {
             fetch = FetchType.LAZY, optional = false
     )
     @JoinColumn(name = "trouble_ticket_id", nullable = false)
-    private TroubleTicket troubleTicket;
+    private TroubleTicketEntity troubleTicket;
 
-    public Note(String text, TroubleTicket troubleTicket) {
+    public NoteEntity(String text, TroubleTicketEntity troubleTicket) {
         this.id = UUID.randomUUID().toString();
         this.text = text;
         this.date = Instant.now();

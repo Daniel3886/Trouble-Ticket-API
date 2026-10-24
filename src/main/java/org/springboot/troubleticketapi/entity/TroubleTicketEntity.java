@@ -3,6 +3,8 @@ package org.springboot.troubleticketapi.entity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
+import org.springboot.troubleticketapi.dto.TroubleTicketStatus;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -12,17 +14,20 @@ import java.util.List;
 @Getter
 @Setter
 @NoArgsConstructor
-public class TroubleTicket {
+public class TroubleTicketEntity {
 
     @Id
     @Column(nullable = false, updatable = false)
     private String id;
 
+    @Column(name = "tenant_id", nullable = false, updatable = false)
+    private String tenantId;
+
     @Column(name = "external_id", nullable = false, updatable = false)
     private String externalId;
 
     @Column(name = "service_id", nullable = false)
-    private int serviceId;
+    private long serviceId;
 
     @Column(nullable = false, length = 5000)
     private String description;
@@ -36,14 +41,14 @@ public class TroubleTicket {
         cascade = CascadeType.ALL,
         orphanRemoval = true
     )
-    private List<Note> notes = new ArrayList<>();
+    private List<NoteEntity> notes = new ArrayList<>();
 
 
-    public TroubleTicket(
+    public TroubleTicketEntity(
             String id,
             String tenantId,
             String externalId,
-            int serviceId,
+            long serviceId,
             String description,
             TroubleTicketStatus status
     ) {
@@ -56,7 +61,7 @@ public class TroubleTicket {
     }
 
     public void addNote(String text) {
-        Note note = new Note(text, this);
+        NoteEntity note = new NoteEntity(text, this);
         notes.add(note);
     }
 
