@@ -2,11 +2,11 @@ package org.springboot.troubleticketapi.dto;
 
 import java.util.List;
 
-public record TroubleTicketResponse (
+public record TroubleTicket (
         String id,
         String externalId,
-        int serviceId,
+        long serviceId,
         String description,
-        String status,
-        List<NoteResponse> notes
+        TroubleTicketStatus status,
+        List<Note> notes
 ){}

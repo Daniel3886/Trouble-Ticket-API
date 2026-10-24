@@ -1,6 +1,7 @@
 package org.springboot.troubleticketapi.dto;
 
-public record ApiErrorResponse (
+public record Error (
         String code,
-        String message
+        String message,
+        String requestId
 ){}

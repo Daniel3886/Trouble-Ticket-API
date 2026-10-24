@@ -2,8 +2,8 @@ package org.springboot.troubleticketapi.dto;
 
 import java.time.Instant;
 
-public record NoteResponse (
+public record Note (
         String id,
-        String note,
+        String text,
         Instant date
 ){}

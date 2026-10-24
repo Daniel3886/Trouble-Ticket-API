@@ -2,7 +2,7 @@ package org.springboot.troubleticketapi.dto;
 
 import jakarta.validation.constraints.NotBlank;
 
-public record CreateNoteRequest (
+public record NoteCreateRequest (
         @NotBlank
-        String note
+        String text
 ){}

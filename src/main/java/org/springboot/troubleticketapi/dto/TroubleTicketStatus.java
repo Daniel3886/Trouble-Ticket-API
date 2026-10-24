@@ -1,4 +1,4 @@
-package org.springboot.troubleticketapi.entity;
+package org.springboot.troubleticketapi.dto;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
@@ -29,9 +29,6 @@ public enum TroubleTicketStatus {
                 return status;
             }
         }
-
-        throw new IllegalArgumentException(
-                "Unknown trouble ticket status: " + value
-        );
+        throw new IllegalArgumentException("Unknown trouble ticket status: " + value);
     }
 }
