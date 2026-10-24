@@ -1,10 +1,12 @@
 package org.springboot.troubleticketapi.controller;
 
 import jakarta.validation.Valid;
-import org.springboot.troubleticketapi.dto.CreateNoteRequest;
-import org.springboot.troubleticketapi.dto.CreateTroubleTicketRequest;
-import org.springboot.troubleticketapi.dto.TroubleTicketResponse;
-import org.springboot.troubleticketapi.entity.TroubleTicket;
+import org.springboot.troubleticketapi.dto.Note;
+import org.springboot.troubleticketapi.dto.NoteCreateRequest;
+import org.springboot.troubleticketapi.dto.TroubleTicket;
+import org.springboot.troubleticketapi.dto.TroubleTicketCloseStatusRequest;
+import org.springboot.troubleticketapi.dto.TroubleTicketCreateRequest;
+import org.springboot.troubleticketapi.dto.TroubleTicketSummary;
 import org.springboot.troubleticketapi.service.TroubleTicketService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -24,10 +26,10 @@ public class TroubleTicketController {
     }
 
     @PostMapping
-    public ResponseEntity<TroubleTicketResponse> createTroubleTicket(
-            @Valid @RequestBody CreateTroubleTicketRequest request) {
+    public ResponseEntity<TroubleTicket> createTroubleTicket(
+            @Valid @RequestBody TroubleTicketCreateRequest request) {
 
-        TroubleTicketResponse response =
+        TroubleTicket response =
                 troubleTicketService.createTroubleTicket(request);
 
         URI location = URI.create(
@@ -38,18 +40,27 @@ public class TroubleTicketController {
     }
 
     @GetMapping
-    public List<TroubleTicket> getTroubleAllTickets(){
+    public List<TroubleTicketSummary> getTroubleAllTickets(){
         return troubleTicketService.getTroubleAllTickets();
     }
 
-    @GetMapping
-    public TroubleTicket getTroubleTicketById(@RequestParam Long id){
+    @GetMapping("/{id}")
+    public TroubleTicket getTroubleTicketById(@PathVariable String id){
         return troubleTicketService.getTroubleTicketById(id);
     }
 
-    @PatchMapping
-    public TroubleTicket updateNote(@Valid @RequestBody CreateNoteRequest request){
-        return troubleTicketService.updateNote(request);
+    @PatchMapping("/{id}")
+    public TroubleTicket closeTroubleTicket(
+            @PathVariable String id,
+            @Valid @RequestBody TroubleTicketCloseStatusRequest request) {
+        return troubleTicketService.closeTroubleTicket(id, request);
+    }
+
+    @PostMapping("/{id}/note")
+    public ResponseEntity<Note> addTroubleTicketNote(
+            @PathVariable String id,
+            @Valid @RequestBody NoteCreateRequest request) {
+        return ResponseEntity.status(201).body(troubleTicketService.addTroubleTicketNote(id, request));
     }
 
 }
