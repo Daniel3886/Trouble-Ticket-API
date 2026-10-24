@@ -5,8 +5,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springboot.troubleticketapi.dto.CreateTroubleTicketRequest;
-import org.springboot.troubleticketapi.entity.TroubleTicket;
+import org.springboot.troubleticketapi.dto.TroubleTicketCreateRequest;
+import org.springboot.troubleticketapi.dto.TroubleTicketCreateStatus;
+import org.springboot.troubleticketapi.entity.TroubleTicketEntity;
 import org.springboot.troubleticketapi.repository.TroubleTicketRepository;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -25,16 +26,16 @@ class TroubleTicketServiceTest {
 
     @Test
     void shouldCreateTicket() {
-        CreateTroubleTicketRequest request =
-                new CreateTroubleTicketRequest(
+        TroubleTicketCreateRequest request =
+                new TroubleTicketCreateRequest(
                         "OK-123456",
                         987654321,
                         "No data connection",
-                        "new",
+                        TroubleTicketCreateStatus.NEW,
                         "Initial note"
                 );
 
-        when(troubleTicketRepository.save(any(TroubleTicket.class)))
+        when(troubleTicketRepository.save(any(TroubleTicketEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         var response = troubleTicketService.createTroubleTicket(request);
@@ -43,20 +44,20 @@ class TroubleTicketServiceTest {
         assertEquals("OK-123456", response.externalId());
         assertEquals(987654321L, response.serviceId());
         assertEquals("No data connection", response.description());
-        assertEquals("new", response.status());
-        assertEquals("Initial note", response.notes().getFirst().note());
+        assertEquals("new", response.status().getValue());
+        assertEquals("Initial note", response.notes().getFirst().text());
 
-        verify(troubleTicketRepository).save(any(TroubleTicket.class));
+        verify(troubleTicketRepository).save(any(TroubleTicketEntity.class));
     }
 
     @Test
-    void shouldRejectInvalidStatus() {
-        CreateTroubleTicketRequest request =
-                new CreateTroubleTicketRequest(
+    void shouldRejectMissingStatus() {
+        TroubleTicketCreateRequest request =
+                new TroubleTicketCreateRequest(
                         "OK-123456",
                         987654321,
                         "No data connection",
-                        "closed",
+                        null,
                         "Initial note"
                 );
 
@@ -66,7 +67,7 @@ class TroubleTicketServiceTest {
         );
 
 
-        verify(troubleTicketRepository, never()).save(any(TroubleTicket.class));
+        verify(troubleTicketRepository, never()).save(any(TroubleTicketEntity.class));
     }
 
 }
