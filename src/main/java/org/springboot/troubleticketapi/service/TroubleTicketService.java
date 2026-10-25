@@ -11,11 +11,11 @@ import org.springboot.troubleticketapi.dto.TroubleTicketStatus;
 import org.springboot.troubleticketapi.dto.TroubleTicketSummary;
 import org.springboot.troubleticketapi.entity.NoteEntity;
 import org.springboot.troubleticketapi.entity.TroubleTicketEntity;
+import org.springboot.troubleticketapi.exception.TicketNotFoundException;
 import org.springboot.troubleticketapi.repository.TroubleTicketRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 public class TroubleTicketService {
@@ -63,11 +63,15 @@ public class TroubleTicketService {
                         ticket.getDescription(),
                         ticket.getStatus()
                 ))
-                .collect(Collectors.toList());
+                .toList();
     }
 
     public TroubleTicket getTroubleTicketById(String id) {
-        return null;
+        TroubleTicketEntity ticket = troubleTicketRepository.findById(id)
+                .orElseThrow(
+                        () -> new TicketNotFoundException("Ticket not found with id: " + id)
+                );
+        return toTroubleTicket(ticket);
     }
 
     public TroubleTicket closeTroubleTicket(
