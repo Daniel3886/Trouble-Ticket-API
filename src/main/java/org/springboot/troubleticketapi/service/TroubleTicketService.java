@@ -15,6 +15,7 @@ import org.springboot.troubleticketapi.repository.TroubleTicketRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class TroubleTicketService {
@@ -54,7 +55,15 @@ public class TroubleTicketService {
 
 
     public List<TroubleTicketSummary> getTroubleAllTickets() {
-            return null;
+        return troubleTicketRepository.findAll()
+                .stream()
+                .map(ticket -> new TroubleTicketSummary(
+                        ticket.getExternalId(),
+                        ticket.getServiceId(),
+                        ticket.getDescription(),
+                        ticket.getStatus()
+                ))
+                .collect(Collectors.toList());
     }
 
     public TroubleTicket getTroubleTicketById(String id) {
