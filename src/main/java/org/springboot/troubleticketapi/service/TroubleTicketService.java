@@ -1,13 +1,16 @@
 package org.springboot.troubleticketapi.service;
 
 import jakarta.validation.Valid;
-import org.springboot.troubleticketapi.dto.CreateNoteRequest;
-import org.springboot.troubleticketapi.dto.CreateTroubleTicketRequest;
-import org.springboot.troubleticketapi.dto.NoteResponse;
-import org.springboot.troubleticketapi.dto.TroubleTicketResponse;
-import org.springboot.troubleticketapi.entity.Note;
-import org.springboot.troubleticketapi.entity.TroubleTicket;
-import org.springboot.troubleticketapi.entity.TroubleTicketStatus;
+import org.springboot.troubleticketapi.dto.Note;
+import org.springboot.troubleticketapi.dto.NoteCreateRequest;
+import org.springboot.troubleticketapi.dto.TroubleTicket;
+import org.springboot.troubleticketapi.dto.TroubleTicketCloseStatusRequest;
+import org.springboot.troubleticketapi.dto.TroubleTicketCreateRequest;
+import org.springboot.troubleticketapi.dto.TroubleTicketCreateStatus;
+import org.springboot.troubleticketapi.dto.TroubleTicketStatus;
+import org.springboot.troubleticketapi.dto.TroubleTicketSummary;
+import org.springboot.troubleticketapi.entity.NoteEntity;
+import org.springboot.troubleticketapi.entity.TroubleTicketEntity;
 import org.springboot.troubleticketapi.repository.TroubleTicketRepository;
 import org.springframework.stereotype.Service;
 
@@ -22,59 +25,72 @@ public class TroubleTicketService {
         this.troubleTicketRepository = troubleTicketRepository;
     }
 
-    public TroubleTicketResponse createTroubleTicket(
-            @Valid CreateTroubleTicketRequest request) {
+    public TroubleTicket createTroubleTicket(
+            @Valid TroubleTicketCreateRequest request
+    ) {
 
-        if(!"new".equals(request.status())){
+        if (request.status() != TroubleTicketCreateStatus.NEW) {
             throw new IllegalArgumentException("New tickets must have status 'new'");
         }
 
-        TroubleTicket troubleTicket = new TroubleTicket();
+        TroubleTicketEntity troubleTicket = new TroubleTicketEntity();
 
         troubleTicket.setExternalId(request.externalId());
         troubleTicket.setServiceId(request.serviceId());
         troubleTicket.setDescription(request.description());
 
-        TroubleTicketStatus status =
-                TroubleTicketStatus.fromValue(request.status());
+            TroubleTicketStatus status =
+                TroubleTicketStatus.NEW;
 
 
         troubleTicket.setStatus(status);
         troubleTicket.addNote(request.note());
 
-        TroubleTicket savedTicket = troubleTicketRepository.save(troubleTicket);
+        TroubleTicketEntity savedTicket = troubleTicketRepository.save(troubleTicket);
 
-        return new TroubleTicketResponse(
+        return toTroubleTicket(savedTicket);
+    }
+
+
+
+    public List<TroubleTicketSummary> getTroubleAllTickets() {
+            return null;
+    }
+
+    public TroubleTicket getTroubleTicketById(String id) {
+        return null;
+    }
+
+    public TroubleTicket closeTroubleTicket(
+            String id,
+            @Valid TroubleTicketCloseStatusRequest request) {
+        return null;
+    }
+
+    public Note addTroubleTicketNote(String id, @Valid NoteCreateRequest request) {
+        return null;
+    }
+
+
+    private TroubleTicket toTroubleTicket(TroubleTicketEntity savedTicket) {
+        return new TroubleTicket(
                 savedTicket.getId(),
                 savedTicket.getExternalId(),
                 savedTicket.getServiceId(),
                 savedTicket.getDescription(),
-                savedTicket.getStatus().getValue(),
+                savedTicket.getStatus(),
                 mapNotes(savedTicket.getNotes())
         );
     }
 
 
-    public List<TroubleTicket> getTroubleAllTickets() {
-        return null;
-    }
-
-    public TroubleTicket getTroubleTicketById(Long id) {
-        return null;
-    }
-
-    public TroubleTicket updateNote(@Valid CreateNoteRequest request) {
-        return null;
-    }
-
-    private List<NoteResponse> mapNotes(List<Note> notes) {
+    private List<Note> mapNotes(List<NoteEntity> notes) {
         return notes.stream()
-                .map(note -> new NoteResponse(
-                   note.getId(),
-                   note.getText(),
-                   note.getDate()
-                ))
+                .map(this::toNote)
                 .toList();
     }
 
+    private Note toNote(NoteEntity note) {
+        return new Note(note.getId(), note.getText(), note.getDate());
+    }
 }
