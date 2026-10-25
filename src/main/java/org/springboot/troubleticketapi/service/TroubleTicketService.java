@@ -7,6 +7,7 @@ import org.springboot.troubleticketapi.dto.TroubleTicket;
 import org.springboot.troubleticketapi.dto.TroubleTicketCloseStatusRequest;
 import org.springboot.troubleticketapi.dto.TroubleTicketCreateRequest;
 import org.springboot.troubleticketapi.dto.TroubleTicketCreateStatus;
+import org.springboot.troubleticketapi.dto.TroubleTicketCloseStatus;
 import org.springboot.troubleticketapi.dto.TroubleTicketStatus;
 import org.springboot.troubleticketapi.dto.TroubleTicketSummary;
 import org.springboot.troubleticketapi.entity.NoteEntity;
@@ -76,12 +77,27 @@ public class TroubleTicketService {
 
     public TroubleTicket closeTroubleTicket(
             String id,
-            @Valid TroubleTicketCloseStatusRequest request) {
-        return null;
+            @Valid TroubleTicketCloseStatusRequest request
+    ) {
+        if (request.status() != TroubleTicketCloseStatus.CLOSED) {
+            throw new TicketNotFoundException("Trouble tickets can only be closed with status 'closed'");
+        }
+
+        TroubleTicketEntity ticket = troubleTicketRepository.findById(id)
+                .orElseThrow(() -> new TicketNotFoundException("Trouble ticket not found: " + id));
+
+        ticket.close();
+        return toTroubleTicket(troubleTicketRepository.save(ticket));
     }
 
     public Note addTroubleTicketNote(String id, @Valid NoteCreateRequest request) {
-        return null;
+        TroubleTicketEntity ticket = troubleTicketRepository.findById(id)
+                .orElseThrow(() -> new TicketNotFoundException("Ticket not found with id: " + id));
+
+        ticket.addNote(request.text());
+        TroubleTicketEntity savedTicket = troubleTicketRepository.save(ticket);
+        List<NoteEntity> notes = savedTicket.getNotes();
+        return toNote(notes.getLast());
     }
 
 
@@ -104,6 +120,10 @@ public class TroubleTicketService {
     }
 
     private Note toNote(NoteEntity note) {
-        return new Note(note.getId(), note.getText(), note.getDate());
+        return new Note(
+                note.getId(),
+                note.getText(),
+                note.getDate()
+        );
     }
 }
