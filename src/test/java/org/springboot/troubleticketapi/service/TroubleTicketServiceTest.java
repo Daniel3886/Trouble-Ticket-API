@@ -5,17 +5,15 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springboot.troubleticketapi.dto.TroubleTicketCreateRequest;
-import org.springboot.troubleticketapi.dto.TroubleTicketCreateStatus;
-import org.springboot.troubleticketapi.dto.TroubleTicketStatus;
-import org.springboot.troubleticketapi.dto.TroubleTicketSummary;
+import org.springboot.troubleticketapi.dto.*;
 import org.springboot.troubleticketapi.entity.TroubleTicketEntity;
+import org.springboot.troubleticketapi.exception.TicketNotFoundException;
 import org.springboot.troubleticketapi.repository.TroubleTicketRepository;
 
 import java.util.List;
+import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -120,6 +118,46 @@ class TroubleTicketServiceTest {
 
         assertEquals(0, result.size());
     }
+
+
+    private static final String TICKET_ID = "8a56c5af-aeb7-4b6b-b493-25f7e74207f0";
+    @Test
+    void shouldReturnTroubleTicketWithMappedFieldsAndNotes() {
+        TroubleTicketEntity ticket = new TroubleTicketEntity();
+        ticket.setExternalId("f40ef04b-ad43-4dc5-aad8-c7b6a0e021ec");
+        ticket.setServiceId(322);
+        ticket.setDescription("new summary for the ticket");
+        ticket.setStatus(TroubleTicketStatus.NEW);
+        ticket.addNote("first note");
+
+        when(troubleTicketRepository.findById(TICKET_ID))
+                .thenReturn(Optional.of(ticket));
+
+        TroubleTicket result = troubleTicketService.getTroubleTicketById(TICKET_ID);
+
+        assertEquals("f40ef04b-ad43-4dc5-aad8-c7b6a0e021ec", result.externalId());
+        assertEquals(322, result.serviceId());
+        assertEquals("new summary for the ticket", result.description());
+        assertEquals(TroubleTicketStatus.NEW, result.status());
+        assertEquals(1, result.notes().size());
+        assertEquals("first note", result.notes().getFirst().text());
+    }
+
+
+    @Test
+    void shouldThrowTicketNotFoundExceptionWhenTicketNotFound() {
+        when(troubleTicketRepository.findById(TICKET_ID))
+                .thenReturn(Optional.empty());
+
+        TicketNotFoundException exception = assertThrows(
+                TicketNotFoundException.class,
+                () -> troubleTicketService.getTroubleTicketById(TICKET_ID)
+        );
+
+        assertTrue(exception.getMessage().contains(TICKET_ID));
+    }
+
+
 
 
 }
