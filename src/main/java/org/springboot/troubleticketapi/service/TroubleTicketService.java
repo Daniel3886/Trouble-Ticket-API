@@ -100,7 +100,6 @@ public class TroubleTicketService {
         return toNote(notes.getLast());
     }
 
-
     private TroubleTicket toTroubleTicket(TroubleTicketEntity savedTicket) {
         return new TroubleTicket(
                 savedTicket.getId(),

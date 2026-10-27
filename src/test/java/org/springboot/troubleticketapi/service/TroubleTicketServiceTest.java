@@ -26,6 +26,8 @@ class TroubleTicketServiceTest {
     @InjectMocks
     TroubleTicketService troubleTicketService;
 
+    private static final String TICKET_ID = "8a56c5af-aeb7-4b6b-b493-25f7e74207f0";
+
     @Test
     void shouldCreateTicket() {
         TroubleTicketCreateRequest request =
@@ -106,6 +108,7 @@ class TroubleTicketServiceTest {
         assertEquals(828, result.get(1).serviceId());
         assertEquals("acknowledged summary for the ticket", result.get(1).description());
         assertEquals(TroubleTicketStatus.ACKNOWLEDGED, result.get(1).status());
+        verify(troubleTicketRepository).findAll();
     }
 
 
@@ -119,8 +122,6 @@ class TroubleTicketServiceTest {
         assertEquals(0, result.size());
     }
 
-
-    private static final String TICKET_ID = "8a56c5af-aeb7-4b6b-b493-25f7e74207f0";
     @Test
     void shouldReturnTroubleTicketWithMappedFieldsAndNotes() {
         TroubleTicketEntity ticket = new TroubleTicketEntity();
@@ -141,11 +142,12 @@ class TroubleTicketServiceTest {
         assertEquals(TroubleTicketStatus.NEW, result.status());
         assertEquals(1, result.notes().size());
         assertEquals("first note", result.notes().getFirst().text());
+        verify(troubleTicketRepository).findById(TICKET_ID);
     }
 
 
     @Test
-    void shouldThrowTicketNotFoundExceptionWhenTicketNotFound() {
+    void shouldThrowTicketNotFoundExceptionWhenTicketNotFoundById() {
         when(troubleTicketRepository.findById(TICKET_ID))
                 .thenReturn(Optional.empty());
 
@@ -155,9 +157,98 @@ class TroubleTicketServiceTest {
         );
 
         assertTrue(exception.getMessage().contains(TICKET_ID));
+        verify(troubleTicketRepository, never()).save(any(TroubleTicketEntity.class));
     }
 
 
+    @Test
+    void shouldCloseTroubleTicket() {
+        TroubleTicketEntity ticket = new TroubleTicketEntity();
+        ticket.setExternalId("f40ef04b-ad43-4dc5-aad8-c7b6a0e021ec");
+        ticket.setServiceId(322);
+        ticket.setDescription("new summary for the ticket");
+        ticket.setStatus(TroubleTicketStatus.IN_PROGRESS);
+
+
+        when(troubleTicketRepository.findById(TICKET_ID))
+                .thenReturn(Optional.of(ticket));
+        when(troubleTicketRepository.save(any(TroubleTicketEntity.class)))
+                .thenReturn(ticket);
+
+        TroubleTicketCloseStatusRequest request =
+                new TroubleTicketCloseStatusRequest(TroubleTicketCloseStatus.CLOSED);
+
+        TroubleTicket result =
+                troubleTicketService.closeTroubleTicket(TICKET_ID, request);
+
+        assertEquals(TroubleTicketStatus.CLOSED, result.status());
+        assertEquals("f40ef04b-ad43-4dc5-aad8-c7b6a0e021ec", result.externalId());
+        assertEquals(322, result.serviceId());
+        assertEquals("new summary for the ticket", result.description());
+        verify(troubleTicketRepository).save(ticket);
+    }
+
+    @Test
+    void shouldRejectClosedStatusIsNotClosed() {
+        TroubleTicketCloseStatusRequest request = new TroubleTicketCloseStatusRequest(null);
+
+        assertThrows(
+                TicketNotFoundException.class,
+                () -> troubleTicketService.closeTroubleTicket(TICKET_ID, request)
+        );
+        verify(troubleTicketRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldTicketNotFoundExceptionWhenCloseTroubleTicketNotFoundById() {
+        when(troubleTicketRepository.findById(TICKET_ID))
+                .thenReturn(Optional.empty());
+
+        TroubleTicketCloseStatusRequest request =
+                new TroubleTicketCloseStatusRequest(TroubleTicketCloseStatus.CLOSED);
+
+        assertThrows(
+                TicketNotFoundException.class,
+                () -> troubleTicketService.closeTroubleTicket(TICKET_ID, request)
+        );
+    }
+
+    @Test
+    void shouldAddTroubleTickedNote() {
+        TroubleTicketEntity ticket = new TroubleTicketEntity();
+        ticket.setExternalId("f40ef04b-ad43-4dc5-aad8-c7b6a0e021ec");
+        ticket.setServiceId(322);
+        ticket.setDescription("new summary for the ticket");
+        ticket.setStatus(TroubleTicketStatus.NEW);
+        ticket.addNote("first note");
+
+        when(troubleTicketRepository.findById(TICKET_ID))
+                .thenReturn(Optional.of(ticket));
+        when(troubleTicketRepository.save(any(TroubleTicketEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Note result =
+                troubleTicketService.addTroubleTicketNote(
+                        TICKET_ID, new NoteCreateRequest("second Note"));
+
+
+        assertEquals("second Note", result.text());
+        assertEquals(2, ticket.getNotes().size());
+        verify(troubleTicketRepository).save(ticket);
+    }
+
+    @Test
+    void shouldThrowTicketNotFoundExceptionWhenAddingNoteToTroubleTicket() {
+        when(troubleTicketRepository.findById(TICKET_ID))
+                .thenReturn(Optional.empty());
+
+        NoteCreateRequest request = new NoteCreateRequest("new note for the ticket");
+
+        assertThrows(
+                TicketNotFoundException.class,
+                () -> troubleTicketService.addTroubleTicketNote(TICKET_ID, request)
+        );
+    }
 
 
 }
