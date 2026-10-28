@@ -8,6 +8,7 @@ import org.springboot.troubleticketapi.dto.TroubleTicketStatus;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @Table(name = "trouble_tickets")
 @Entity
@@ -45,14 +46,13 @@ public class TroubleTicketEntity {
 
 
     public TroubleTicketEntity(
-            String id,
             String tenantId,
             String externalId,
             long serviceId,
             String description,
             TroubleTicketStatus status
     ) {
-        this.id = id;
+        this.id = UUID.randomUUID().toString();
         this.tenantId = tenantId;
         this.externalId = externalId;
         this.serviceId = serviceId;
