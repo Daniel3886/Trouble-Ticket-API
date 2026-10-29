@@ -48,15 +48,12 @@ public class TroubleTicketService {
             return toTroubleTicket(existing.get());
         }
 
-        TroubleTicketStatus status =
-                TroubleTicketStatus.NEW;
-
         TroubleTicketEntity troubleTicket = new TroubleTicketEntity(
                 tenantId,
                 request.externalId(),
                 request.serviceId(),
                 request.description(),
-                status
+                TroubleTicketStatus.NEW
         );
 
         troubleTicket.addNote(request.note());
@@ -99,7 +96,7 @@ public class TroubleTicketService {
         String tenantId = currentTenant.getTenantId();
 
         if (request.status() != TroubleTicketCloseStatus.CLOSED) {
-            throw new TicketNotFoundException("Trouble tickets can only be closed with status 'closed'");
+            throw new IllegalArgumentException("Trouble tickets can only be closed with status 'closed'");
         }
 
         TroubleTicketEntity ticket = troubleTicketRepository.findByIdAndTenantId(id, tenantId)
