@@ -1,6 +1,5 @@
 package org.springboot.troubleticketapi.service;
 
-import jakarta.transaction.Transactional;
 import org.springboot.troubleticketapi.dto.Note;
 import org.springboot.troubleticketapi.dto.NoteCreateRequest;
 import org.springboot.troubleticketapi.dto.TroubleTicket;
@@ -16,6 +15,7 @@ import org.springboot.troubleticketapi.exception.TicketNotFoundException;
 import org.springboot.troubleticketapi.repository.TroubleTicketRepository;
 import org.springboot.troubleticketapi.security.CurrentTenant;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -80,7 +80,7 @@ public class TroubleTicketService {
                 .toList();
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public TroubleTicket getTroubleTicketById(String id) {
         String tenantId = currentTenant.getTenantId();
 
