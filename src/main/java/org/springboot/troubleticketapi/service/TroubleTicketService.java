@@ -34,9 +34,7 @@ public class TroubleTicketService {
         this.currentTenant = currentTenant;
     }
 
-    public TroubleTicket createTroubleTicket(
-            @Valid TroubleTicketCreateRequest request
-    ) {
+    public TroubleTicket createTroubleTicket(TroubleTicketCreateRequest request) {
 
         String tenantId = currentTenant.getTenantId();
 
@@ -96,7 +94,7 @@ public class TroubleTicketService {
 
     public TroubleTicket closeTroubleTicket(
             String id,
-            @Valid TroubleTicketCloseStatusRequest request
+            TroubleTicketCloseStatusRequest request
     ) {
         String tenantId = currentTenant.getTenantId();
 
@@ -111,7 +109,7 @@ public class TroubleTicketService {
         return toTroubleTicket(troubleTicketRepository.save(ticket));
     }
 
-    public Note addTroubleTicketNote(String id, @Valid NoteCreateRequest request) {
+    public Note addTroubleTicketNote(String id,NoteCreateRequest request) {
         String tenantId = currentTenant.getTenantId();
 
         TroubleTicketEntity ticket = troubleTicketRepository.findByIdAndTenantId(id, tenantId)
