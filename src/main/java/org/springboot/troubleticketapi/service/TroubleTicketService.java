@@ -1,6 +1,6 @@
 package org.springboot.troubleticketapi.service;
 
-import jakarta.validation.Valid;
+import jakarta.transaction.Transactional;
 import org.springboot.troubleticketapi.dto.Note;
 import org.springboot.troubleticketapi.dto.NoteCreateRequest;
 import org.springboot.troubleticketapi.dto.TroubleTicket;
@@ -34,6 +34,7 @@ public class TroubleTicketService {
         this.currentTenant = currentTenant;
     }
 
+    @Transactional
     public TroubleTicket createTroubleTicket(TroubleTicketCreateRequest request) {
 
         String tenantId = currentTenant.getTenantId();
@@ -79,6 +80,7 @@ public class TroubleTicketService {
                 .toList();
     }
 
+    @Transactional
     public TroubleTicket getTroubleTicketById(String id) {
         String tenantId = currentTenant.getTenantId();
 
@@ -89,6 +91,7 @@ public class TroubleTicketService {
         return toTroubleTicket(ticket);
     }
 
+    @Transactional
     public TroubleTicket closeTroubleTicket(
             String id,
             TroubleTicketCloseStatusRequest request
@@ -106,7 +109,8 @@ public class TroubleTicketService {
         return toTroubleTicket(troubleTicketRepository.save(ticket));
     }
 
-    public Note addTroubleTicketNote(String id,NoteCreateRequest request) {
+    @Transactional
+    public Note addTroubleTicketNote(String id, NoteCreateRequest request) {
         String tenantId = currentTenant.getTenantId();
 
         TroubleTicketEntity ticket = troubleTicketRepository.findByIdAndTenantId(id, tenantId)
