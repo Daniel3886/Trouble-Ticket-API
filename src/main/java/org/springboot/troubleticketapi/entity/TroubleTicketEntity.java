@@ -10,7 +10,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-@Table(name = "trouble_tickets")
+@Table(
+        name = "trouble_tickets",
+        uniqueConstraints = @UniqueConstraint(
+                name = "unique_tenant_external_id",
+                columnNames = {"tenant_id", "external_id"}
+        )
+)
 @Entity
 @Getter
 @Setter
