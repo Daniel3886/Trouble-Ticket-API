@@ -44,6 +44,8 @@ public class TroubleTicketEntity {
     )
     private List<NoteEntity> notes = new ArrayList<>();
 
+    @Version
+    private Long version;
 
     public TroubleTicketEntity(
             String tenantId,
