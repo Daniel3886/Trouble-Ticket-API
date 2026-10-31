@@ -1,5 +1,6 @@
 package org.springboot.troubleticketapi.security;
 
+import org.springboot.troubleticketapi.exception.MissingTenantException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
@@ -21,7 +22,7 @@ public class CurrentTenant {
                 .getClaimAsString("tenant_id");
 
         if(tenantId == null || tenantId.isBlank()) {
-            throw new IllegalStateException("JWT is missing tenant_id");
+            throw new MissingTenantException();
         }
 
         return tenantId;

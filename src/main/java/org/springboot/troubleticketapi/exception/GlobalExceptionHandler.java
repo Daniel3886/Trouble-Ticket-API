@@ -50,6 +50,19 @@ public class GlobalExceptionHandler {
         );
     }
 
+    @ExceptionHandler(MissingTenantException.class)
+    public ResponseEntity<Error> handleMissingTenant(
+            MissingTenantException e,
+            HttpServletRequest request
+    ) {
+        return buildErrorResponse(
+                "MISSING_TENANT",
+                e,
+                HttpStatus.FORBIDDEN,
+                request
+        );
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Error> handleIllegalArgument(
             IllegalArgumentException e,
