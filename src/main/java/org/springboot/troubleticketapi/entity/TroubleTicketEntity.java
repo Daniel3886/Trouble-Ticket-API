@@ -68,9 +68,10 @@ public class TroubleTicketEntity {
         this.status = status;
     }
 
-    public void addNote(String text) {
+    public NoteEntity addNote(String text) {
         NoteEntity note = new NoteEntity(text, this);
         notes.add(note);
+        return note;
     }
 
     public void close() {

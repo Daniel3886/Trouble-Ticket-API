@@ -3,6 +3,7 @@ package org.springboot.troubleticketapi.service;
 import org.springboot.troubleticketapi.dto.*;
 import org.springboot.troubleticketapi.entity.NoteEntity;
 import org.springboot.troubleticketapi.entity.TroubleTicketEntity;
+import org.springboot.troubleticketapi.exception.ServiceNotFoundException;
 import org.springboot.troubleticketapi.exception.TicketNotFoundException;
 import org.springboot.troubleticketapi.repository.TroubleTicketRepository;
 import org.springboot.troubleticketapi.security.CurrentTenant;
@@ -31,7 +32,7 @@ public class TroubleTicketService {
         String tenantId = currentTenant.getTenantId();
 
         if (request.status() != TroubleTicketCreateStatus.NEW) {
-            throw new IllegalArgumentException("New tickets must have status 'new'");
+            throw new ServiceNotFoundException(request.serviceId());
         }
 
         Optional<TroubleTicketEntity> existing =
@@ -93,7 +94,7 @@ public class TroubleTicketService {
         }
 
         TroubleTicketEntity ticket = troubleTicketRepository.findByIdAndTenantId(id, tenantId)
-                .orElseThrow(() -> new TicketNotFoundException("Trouble ticket not found: " + id));
+                .orElseThrow(() -> new IllegalArgumentException("Trouble ticket not found: " + id));
 
         ticket.close();
         return toTroubleTicket(troubleTicketRepository.save(ticket));
@@ -106,10 +107,10 @@ public class TroubleTicketService {
         TroubleTicketEntity ticket = troubleTicketRepository.findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() -> new TicketNotFoundException("Ticket not found with id: " + id));
 
-        ticket.addNote(request.text());
-        TroubleTicketEntity savedTicket = troubleTicketRepository.save(ticket);
-        List<NoteEntity> notes = savedTicket.getNotes();
-        return toNote(notes.getLast());
+        NoteEntity note = ticket.addNote(request.text());
+        troubleTicketRepository.save(ticket);
+
+        return toNote(note);
     }
 
     private TroubleTicket toTroubleTicket(TroubleTicketEntity savedTicket) {
