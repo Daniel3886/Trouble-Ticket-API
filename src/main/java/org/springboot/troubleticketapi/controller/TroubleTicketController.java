@@ -1,12 +1,7 @@
 package org.springboot.troubleticketapi.controller;
 
 import jakarta.validation.Valid;
-import org.springboot.troubleticketapi.dto.Note;
-import org.springboot.troubleticketapi.dto.NoteCreateRequest;
-import org.springboot.troubleticketapi.dto.TroubleTicket;
-import org.springboot.troubleticketapi.dto.TroubleTicketCloseStatusRequest;
-import org.springboot.troubleticketapi.dto.TroubleTicketCreateRequest;
-import org.springboot.troubleticketapi.dto.TroubleTicketSummary;
+import org.springboot.troubleticketapi.dto.*;
 import org.springboot.troubleticketapi.service.TroubleTicketService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -29,14 +24,19 @@ public class TroubleTicketController {
     public ResponseEntity<TroubleTicket> createTroubleTicket(
             @Valid @RequestBody TroubleTicketCreateRequest request) {
 
-        TroubleTicket response =
+        CreateResult result =
                 troubleTicketService.createTroubleTicket(request);
+        TroubleTicket ticket = result.ticket();
+
+        if(!result.created()) {
+            return ResponseEntity.ok(ticket);
+        }
 
         URI location = URI.create(
-                "/api/v1/troubleTicket/" + response.id()
+                "/api/v1/troubleTicket/" + ticket.id()
         );
 
-        return ResponseEntity.created(location).body(response);
+        return ResponseEntity.created(location).body(ticket);
     }
 
     @GetMapping

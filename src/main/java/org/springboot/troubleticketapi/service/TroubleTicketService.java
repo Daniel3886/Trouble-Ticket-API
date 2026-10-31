@@ -1,14 +1,6 @@
 package org.springboot.troubleticketapi.service;
 
-import org.springboot.troubleticketapi.dto.Note;
-import org.springboot.troubleticketapi.dto.NoteCreateRequest;
-import org.springboot.troubleticketapi.dto.TroubleTicket;
-import org.springboot.troubleticketapi.dto.TroubleTicketCloseStatusRequest;
-import org.springboot.troubleticketapi.dto.TroubleTicketCreateRequest;
-import org.springboot.troubleticketapi.dto.TroubleTicketCreateStatus;
-import org.springboot.troubleticketapi.dto.TroubleTicketCloseStatus;
-import org.springboot.troubleticketapi.dto.TroubleTicketStatus;
-import org.springboot.troubleticketapi.dto.TroubleTicketSummary;
+import org.springboot.troubleticketapi.dto.*;
 import org.springboot.troubleticketapi.entity.NoteEntity;
 import org.springboot.troubleticketapi.entity.TroubleTicketEntity;
 import org.springboot.troubleticketapi.exception.TicketNotFoundException;
@@ -35,8 +27,7 @@ public class TroubleTicketService {
     }
 
     @Transactional
-    public TroubleTicket createTroubleTicket(TroubleTicketCreateRequest request) {
-
+    public CreateResult createTroubleTicket(TroubleTicketCreateRequest request) {
         String tenantId = currentTenant.getTenantId();
 
         if (request.status() != TroubleTicketCreateStatus.NEW) {
@@ -46,7 +37,7 @@ public class TroubleTicketService {
         Optional<TroubleTicketEntity> existing =
                 troubleTicketRepository.findByTenantIdAndExternalId(tenantId, request.externalId());
         if (existing.isPresent()) {
-            return toTroubleTicket(existing.get());
+            return new CreateResult(toTroubleTicket(existing.get()), false);
         }
 
         TroubleTicketEntity troubleTicket = new TroubleTicketEntity(
@@ -60,8 +51,7 @@ public class TroubleTicketService {
         troubleTicket.addNote(request.note());
 
         TroubleTicketEntity savedTicket = troubleTicketRepository.save(troubleTicket);
-
-        return toTroubleTicket(savedTicket);
+        return new CreateResult(toTroubleTicket(savedTicket), true);
     }
 
 
