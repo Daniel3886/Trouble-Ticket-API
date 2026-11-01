@@ -9,8 +9,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springboot.troubleticketapi.dto.*;
 import org.springboot.troubleticketapi.entity.TroubleTicketEntity;
+import org.springboot.troubleticketapi.exception.ServiceNotFoundException;
 import org.springboot.troubleticketapi.exception.TicketNotFoundException;
 import org.springboot.troubleticketapi.repository.TroubleTicketRepository;
+import org.springboot.troubleticketapi.repository.ServiceRepository;
 import org.springboot.troubleticketapi.security.CurrentTenant;
 
 import java.util.List;
@@ -27,6 +29,9 @@ class TroubleTicketServiceTest {
     TroubleTicketRepository troubleTicketRepository;
 
     @Mock
+    ServiceRepository serviceRepository;
+
+    @Mock
     CurrentTenant tenant;
 
     @InjectMocks
@@ -38,6 +43,8 @@ class TroubleTicketServiceTest {
     @BeforeEach
     void setUp() {
         when(tenant.getTenantId()).thenReturn(TENANT_ID);
+        lenient().when(serviceRepository.existsByIdAndTenantIdAndActiveTrue(anyLong(), eq(TENANT_ID)))
+                .thenReturn(true);
     }
 
     @Test
@@ -45,17 +52,21 @@ class TroubleTicketServiceTest {
         TroubleTicketCreateRequest request =
                 new TroubleTicketCreateRequest(
                         "OK-123456",
-                        987654321,
+                        987654321L,
                         "No data connection",
                         TroubleTicketCreateStatus.NEW,
                         "Initial note"
                 );
 
+        when(troubleTicketRepository.findByTenantIdAndExternalId(TENANT_ID, "OK-123456"))
+                .thenReturn(Optional.empty());
+
+        when(serviceRepository.existsByIdAndTenantIdAndActiveTrue(987654321L, TENANT_ID))
+                .thenReturn(true);
+
         when(troubleTicketRepository.save(any(TroubleTicketEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        when(troubleTicketRepository.findByTenantIdAndExternalId(TENANT_ID, "OK-123456"))
-                .thenReturn(Optional.empty());
 
         var response = troubleTicketService.createTroubleTicket(request);
 
@@ -66,6 +77,7 @@ class TroubleTicketServiceTest {
         assertEquals("Initial note", response.ticket().notes().getFirst().text());
         assertTrue(response.created());
 
+        verify(serviceRepository).existsByIdAndTenantIdAndActiveTrue(987654321L, TENANT_ID);
         verify(troubleTicketRepository).save(any(TroubleTicketEntity.class));
     }
 
@@ -87,6 +99,93 @@ class TroubleTicketServiceTest {
 
 
         verify(troubleTicketRepository, never()).save(any(TroubleTicketEntity.class));
+    }
+
+    @Test
+    void shouldReturnExistingTicketWithoutSavingWhenExternalIdExists() {
+        TroubleTicketEntity existing = new TroubleTicketEntity(
+                TENANT_ID,
+                "OK-123456",
+                987654321L,
+                "No data connection",
+                TroubleTicketStatus.IN_PROGRESS
+
+        );
+        existing.addNote("Initial note");
+
+        when(troubleTicketRepository.findByTenantIdAndExternalId(TENANT_ID, "OK-123456"))
+                .thenReturn(Optional.of(existing));
+
+        TroubleTicketCreateRequest request = new TroubleTicketCreateRequest(
+                "OK-123456",
+                987654321L,
+                "A different description",
+                TroubleTicketCreateStatus.NEW,
+                "A different note"
+        );
+
+        CreateResult result = troubleTicketService.createTroubleTicket(request);
+
+        assertFalse(result.created());
+        assertEquals(existing.getId(), result.ticket().id());
+        assertEquals(TroubleTicketStatus.IN_PROGRESS, result.ticket().status());
+        assertEquals("No data connection", result.ticket().description());
+        assertEquals(1, result.ticket().notes().size());
+
+        verify(troubleTicketRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldAssignCurrentTenantToNewTicket() {
+        when(troubleTicketRepository.findByTenantIdAndExternalId(TENANT_ID, "OK-123456"))
+                .thenReturn(Optional.empty());
+        when(troubleTicketRepository.save(any(TroubleTicketEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        TroubleTicketCreateRequest request = new TroubleTicketCreateRequest(
+                "OK-123456",
+                987654321,
+                "No data connection",
+                TroubleTicketCreateStatus.NEW,
+                "Initial note"
+        );
+
+        troubleTicketService.createTroubleTicket(request);
+
+        ArgumentCaptor<TroubleTicketEntity> captor =
+                ArgumentCaptor.forClass(TroubleTicketEntity.class);
+        verify(troubleTicketRepository).save(captor.capture());
+
+        TroubleTicketEntity saved = captor.getValue();
+        assertEquals(TENANT_ID, saved.getTenantId());
+        assertEquals("OK-123456", saved.getExternalId());
+        assertEquals(TroubleTicketStatus.NEW, saved.getStatus());
+        assertEquals(1, saved.getNotes().size());
+        assertEquals("Initial note", saved.getNotes().getFirst().getText());
+    }
+
+    @Test
+    void shouldThrowServiceNotFoundExceptionWhenServiceDoesNotExist() {
+        when(troubleTicketRepository.findByTenantIdAndExternalId(TENANT_ID, "OK-123456"))
+                .thenReturn(Optional.empty());
+        when(serviceRepository.existsByIdAndTenantIdAndActiveTrue(987654321L, TENANT_ID))
+                .thenReturn(false);
+
+        TroubleTicketCreateRequest request = new TroubleTicketCreateRequest(
+                "OK-123456",
+                987654321L,
+                "No data connection",
+                TroubleTicketCreateStatus.NEW,
+                "Initial note"
+        );
+
+        assertThrows(
+                ServiceNotFoundException.class,
+                () -> troubleTicketService.createTroubleTicket(request)
+        );
+
+        verify(serviceRepository).existsByIdAndTenantIdAndActiveTrue(987654321L, TENANT_ID);
+        verify(troubleTicketRepository, never()).save(any());
     }
 
     @Test
@@ -246,9 +345,6 @@ class TroubleTicketServiceTest {
 
         when(troubleTicketRepository.findByIdAndTenantId(TICKET_ID, TENANT_ID))
                 .thenReturn(Optional.of(ticket));
-        when(troubleTicketRepository.save(any(TroubleTicketEntity.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-
         Note result =
                 troubleTicketService.addTroubleTicketNote(
                         TICKET_ID, new NoteCreateRequest("second Note"));
@@ -280,69 +376,6 @@ class TroubleTicketServiceTest {
         );
 
         verify(troubleTicketRepository, never()).save(any());
-    }
-
-    @Test
-    void shouldReturnExistingTicketWithoutSavingWhenExternalIdExists() {
-        TroubleTicketEntity existing = new TroubleTicketEntity(
-                TENANT_ID,
-                "OK-123456",
-                987654321L,
-                "No data connection",
-                TroubleTicketStatus.IN_PROGRESS
-
-        );
-        existing.addNote("Initial note");
-
-        when(troubleTicketRepository.findByTenantIdAndExternalId(TENANT_ID, "OK-123456"))
-                .thenReturn(Optional.of(existing));
-
-        TroubleTicketCreateRequest request = new TroubleTicketCreateRequest(
-                "OK-123456",
-                987654321L,
-                "A different description",
-                TroubleTicketCreateStatus.NEW,
-                "A different note"
-        );
-
-        CreateResult result = troubleTicketService.createTroubleTicket(request);
-
-        assertFalse(result.created());
-        assertEquals(existing.getId(), result.ticket().id());
-        assertEquals(TroubleTicketStatus.IN_PROGRESS, result.ticket().status());
-        assertEquals("No data connection", result.ticket().description());
-        assertEquals(1, result.ticket().notes().size());
-
-        verify(troubleTicketRepository, never()).save(any());
-    }
-
-    @Test
-    void shouldAssignCurrentTenantToNewTicket() {
-        when(troubleTicketRepository.findByTenantIdAndExternalId(TENANT_ID, "OK-123456"))
-                .thenReturn(Optional.empty());
-        when(troubleTicketRepository.save(any(TroubleTicketEntity.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-
-        TroubleTicketCreateRequest request = new TroubleTicketCreateRequest(
-                "OK-123456",
-                987654321,
-                "No data connection",
-                TroubleTicketCreateStatus.NEW,
-                "Initial note"
-        );
-
-        troubleTicketService.createTroubleTicket(request);
-
-        ArgumentCaptor<TroubleTicketEntity> argumentCaptor =
-                ArgumentCaptor.forClass(TroubleTicketEntity.class);
-        verify(troubleTicketRepository).save(argumentCaptor.capture());
-
-        TroubleTicketEntity saved = argumentCaptor.getValue();
-        assertEquals(TENANT_ID, saved.getTenantId());
-        assertEquals("OK-123456", saved.getExternalId());
-        assertEquals(TroubleTicketStatus.NEW, saved.getStatus());
-        assertEquals(1, saved.getNotes().size());
-        assertEquals("Initial note", saved.getNotes().getFirst().getText());
     }
 
 }

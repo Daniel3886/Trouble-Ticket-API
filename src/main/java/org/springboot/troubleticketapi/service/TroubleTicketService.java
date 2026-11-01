@@ -102,7 +102,7 @@ public class TroubleTicketService {
         }
 
         TroubleTicketEntity ticket = troubleTicketRepository.findByIdAndTenantId(id, tenantId)
-                .orElseThrow(() -> new IllegalArgumentException("Trouble ticket not found: " + id));
+                .orElseThrow(() -> new TicketNotFoundException("Trouble ticket not found: " + id));
 
         ticket.close();
         return toTroubleTicket(troubleTicketRepository.save(ticket));
