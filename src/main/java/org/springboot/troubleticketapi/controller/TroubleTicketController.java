@@ -28,13 +28,14 @@ public class TroubleTicketController {
                 troubleTicketService.createTroubleTicket(request);
         TroubleTicket ticket = result.ticket();
 
-        if(!result.created()) {
-            return ResponseEntity.ok(ticket);
-        }
 
         URI location = URI.create(
                 "/api/v1/troubleTicket/" + ticket.id()
         );
+
+        if(!result.created()) {
+            return ResponseEntity.ok().location(location).body(ticket);
+        }
 
         return ResponseEntity.created(location).body(ticket);
     }
