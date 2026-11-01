@@ -5,6 +5,7 @@ import org.springboot.troubleticketapi.dto.Error;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -70,6 +71,19 @@ public class GlobalExceptionHandler {
     ) {
         return buildErrorResponse(
                 "ILLEGAL_ARGUMENT",
+                e,
+                HttpStatus.BAD_REQUEST,
+                request
+        );
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Error> handleUnreadableMessage(
+            HttpMessageNotReadableException e,
+            HttpServletRequest request
+    ) {
+        return buildErrorResponse(
+                "VALIDATION_ERROR",
                 e,
                 HttpStatus.BAD_REQUEST,
                 request
