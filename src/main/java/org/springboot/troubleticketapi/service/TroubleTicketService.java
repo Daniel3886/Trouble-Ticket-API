@@ -6,6 +6,7 @@ import org.springboot.troubleticketapi.entity.TroubleTicketEntity;
 import org.springboot.troubleticketapi.exception.ServiceNotFoundException;
 import org.springboot.troubleticketapi.exception.TicketNotFoundException;
 import org.springboot.troubleticketapi.repository.TroubleTicketRepository;
+import org.springboot.troubleticketapi.repository.ServiceRepository;
 import org.springboot.troubleticketapi.security.CurrentTenant;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,13 +18,16 @@ import java.util.Optional;
 public class TroubleTicketService {
 
     private final TroubleTicketRepository troubleTicketRepository;
+    private final ServiceRepository serviceRepository;
     private final CurrentTenant currentTenant;
 
     public TroubleTicketService(
             TroubleTicketRepository troubleTicketRepository,
+            ServiceRepository serviceRepository,
             CurrentTenant currentTenant
     ) {
         this.troubleTicketRepository = troubleTicketRepository;
+        this.serviceRepository = serviceRepository;
         this.currentTenant = currentTenant;
     }
 
@@ -32,13 +36,17 @@ public class TroubleTicketService {
         String tenantId = currentTenant.getTenantId();
 
         if (request.status() != TroubleTicketCreateStatus.NEW) {
-            throw new ServiceNotFoundException(request.serviceId());
+            throw new IllegalArgumentException("New tickets must have status 'new'");
         }
 
         Optional<TroubleTicketEntity> existing =
                 troubleTicketRepository.findByTenantIdAndExternalId(tenantId, request.externalId());
         if (existing.isPresent()) {
             return new CreateResult(toTroubleTicket(existing.get()), false);
+        }
+
+        if (!serviceRepository.existsByIdAndTenantIdAndActiveTrue(request.serviceId(), tenantId)) {
+            throw new ServiceNotFoundException(request.serviceId());
         }
 
         TroubleTicketEntity troubleTicket = new TroubleTicketEntity(
