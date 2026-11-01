@@ -8,6 +8,7 @@ import org.springboot.troubleticketapi.exception.TicketNotFoundException;
 import org.springboot.troubleticketapi.repository.TroubleTicketRepository;
 import org.springboot.troubleticketapi.repository.ServiceRepository;
 import org.springboot.troubleticketapi.security.CurrentTenant;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,15 +20,18 @@ public class TroubleTicketService {
 
     private final TroubleTicketRepository troubleTicketRepository;
     private final ServiceRepository serviceRepository;
+    private final TicketPersistence ticketPersistence;
     private final CurrentTenant currentTenant;
 
     public TroubleTicketService(
             TroubleTicketRepository troubleTicketRepository,
             ServiceRepository serviceRepository,
+            TicketPersistence ticketPersistence,
             CurrentTenant currentTenant
     ) {
         this.troubleTicketRepository = troubleTicketRepository;
         this.serviceRepository = serviceRepository;
+        this.ticketPersistence = ticketPersistence;
         this.currentTenant = currentTenant;
     }
 
@@ -59,8 +63,15 @@ public class TroubleTicketService {
 
         troubleTicket.addNote(request.note());
 
-        TroubleTicketEntity savedTicket = troubleTicketRepository.save(troubleTicket);
-        return new CreateResult(toTroubleTicket(savedTicket), true);
+        try {
+            ticketPersistence.persist(troubleTicket);
+            return new CreateResult(toTroubleTicket(troubleTicket), true);
+        } catch (DataIntegrityViolationException duplicateExternalId) {
+            TroubleTicketEntity concurrentTicket = troubleTicketRepository
+                    .findByTenantIdAndExternalId(tenantId, request.externalId())
+                    .orElseThrow(() -> duplicateExternalId);
+            return new CreateResult(toTroubleTicket(concurrentTicket), false);
+        }
     }
 
 
