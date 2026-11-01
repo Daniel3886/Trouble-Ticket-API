@@ -191,11 +191,13 @@ class TroubleTicketServiceTest {
     @Test
     void shouldReturnTwoTroubleTicketSummaries() {
 
-        TroubleTicketEntity ticket1 = new TroubleTicketEntity();
-        ticket1.setExternalId("8a56c5af-aeb7-4b6b-b493-25f7e74207f0");
-        ticket1.setServiceId(322);
-        ticket1.setDescription("new summary for the ticket");
-        ticket1.setStatus(TroubleTicketStatus.NEW);
+        TroubleTicketEntity ticket1 = new TroubleTicketEntity(
+                TENANT_ID,
+                "8a56c5af-aeb7-4b6b-b493-25f7e74207f0",
+                322,
+                "new summary for the ticket",
+                TroubleTicketStatus.NEW
+        );
 
         TroubleTicketEntity ticket2 = new TroubleTicketEntity();
         ticket2.setExternalId("52dc8009-5bb6-4637-89b5-caf213238313");
@@ -238,12 +240,13 @@ class TroubleTicketServiceTest {
 
     @Test
     void shouldReturnTroubleTicketWithMappedFieldsAndNotes() {
-        TroubleTicketEntity ticket = new TroubleTicketEntity();
-        ticket.setExternalId("f40ef04b-ad43-4dc5-aad8-c7b6a0e021ec");
-        ticket.setServiceId(322);
-        ticket.setDescription("new summary for the ticket");
-        ticket.setStatus(TroubleTicketStatus.NEW);
-        ticket.addNote("first note");
+        TroubleTicketEntity ticket = new TroubleTicketEntity(
+                TENANT_ID,
+                "f40ef04b-ad43-4dc5-aad8-c7b6a0e021ec",
+                322,
+                "new summary for the ticket",
+                TroubleTicketStatus.NEW
+        );
 
         when(troubleTicketRepository.findByIdAndTenantId(TICKET_ID, TENANT_ID))
                 .thenReturn(Optional.of(ticket));
@@ -277,12 +280,13 @@ class TroubleTicketServiceTest {
 
     @Test
     void shouldCloseTroubleTicket() {
-        TroubleTicketEntity ticket = new TroubleTicketEntity();
-        ticket.setExternalId("f40ef04b-ad43-4dc5-aad8-c7b6a0e021ec");
-        ticket.setServiceId(322);
-        ticket.setDescription("new summary for the ticket");
-        ticket.setStatus(TroubleTicketStatus.IN_PROGRESS);
-
+        TroubleTicketEntity ticket = new TroubleTicketEntity(
+                TENANT_ID,
+                "f40ef04b-ad43-4dc5-aad8-c7b6a0e021ec",
+                322,
+                "new summary for the ticket",
+                TroubleTicketStatus.IN_PROGRESS
+        );
 
         when(troubleTicketRepository.findByIdAndTenantId(TICKET_ID, TENANT_ID))
                 .thenReturn(Optional.of(ticket));
