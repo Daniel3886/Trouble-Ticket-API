@@ -1,9 +1,9 @@
 package org.springboot.troubleticketapi.security;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -12,6 +12,8 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
+import jakarta.servlet.http.HttpServletResponse;
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
@@ -22,7 +24,13 @@ import java.nio.charset.StandardCharsets;
 public class SecurityConfig {
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http) {
+    ObjectMapper objectMapper() {
+        return new ObjectMapper().findAndRegisterModules();
+    }
+
+    @Bean
+    SecurityFilterChain securityFilterChain(HttpSecurity http, RequestIdFilter requestIdFilter,
+                                            JsonSecurityErrorHandler errorHandler) {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session ->
@@ -34,9 +42,22 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/**").authenticated()
                         .anyRequest().denyAll()
                 )
-                .oauth2ResourceServer(oauth2 ->
-                        oauth2.jwt(Customizer.withDefaults())
-                );
+                .exceptionHandling(errors -> errors
+                        .authenticationEntryPoint(((request, response, authException) -> errorHandler.write(
+                                request, response, HttpServletResponse.SC_UNAUTHORIZED,
+                                "UNAUTHORIZED", "Missing or invalid Bearer token"))
+                        )
+                        .accessDeniedHandler((request, response, exception) -> errorHandler.write(
+                                request, response, HttpServletResponse.SC_FORBIDDEN,
+                                "FORBIDDEN", "Access is denied"))
+                )
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .authenticationEntryPoint((request, response, exception) -> errorHandler.write(
+                                request, response, HttpServletResponse.SC_UNAUTHORIZED,
+                                "UNAUTHORIZED", "Missing or invalid Bearer token"))
+                        .jwt(jwt -> {}));
+
+        http.addFilterBefore(requestIdFilter, BearerTokenAuthenticationFilter.class);
 
         return http.build();
     }
