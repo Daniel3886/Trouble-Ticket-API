@@ -32,6 +32,9 @@ class TroubleTicketServiceTest {
     ServiceRepository serviceRepository;
 
     @Mock
+    TicketPersistence ticketPersistence;
+
+    @Mock
     CurrentTenant tenant;
 
     @InjectMocks
@@ -45,6 +48,8 @@ class TroubleTicketServiceTest {
         when(tenant.getTenantId()).thenReturn(TENANT_ID);
         lenient().when(serviceRepository.existsByIdAndTenantIdAndActiveTrue(anyLong(), eq(TENANT_ID)))
                 .thenReturn(true);
+        lenient().when(ticketPersistence.persist(any(TroubleTicketEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Test
@@ -61,13 +66,6 @@ class TroubleTicketServiceTest {
         when(troubleTicketRepository.findByTenantIdAndExternalId(TENANT_ID, "OK-123456"))
                 .thenReturn(Optional.empty());
 
-        when(serviceRepository.existsByIdAndTenantIdAndActiveTrue(987654321L, TENANT_ID))
-                .thenReturn(true);
-
-        when(troubleTicketRepository.save(any(TroubleTicketEntity.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-
-
         var response = troubleTicketService.createTroubleTicket(request);
 
         assertEquals("OK-123456", response.ticket().externalId());
@@ -77,8 +75,7 @@ class TroubleTicketServiceTest {
         assertEquals("Initial note", response.ticket().notes().getFirst().text());
         assertTrue(response.created());
 
-        verify(serviceRepository).existsByIdAndTenantIdAndActiveTrue(987654321L, TENANT_ID);
-        verify(troubleTicketRepository).save(any(TroubleTicketEntity.class));
+        verify(ticketPersistence).persist(any(TroubleTicketEntity.class));
     }
 
     @Test
@@ -139,9 +136,6 @@ class TroubleTicketServiceTest {
     void shouldAssignCurrentTenantToNewTicket() {
         when(troubleTicketRepository.findByTenantIdAndExternalId(TENANT_ID, "OK-123456"))
                 .thenReturn(Optional.empty());
-        when(troubleTicketRepository.save(any(TroubleTicketEntity.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-
         TroubleTicketCreateRequest request = new TroubleTicketCreateRequest(
                 "OK-123456",
                 987654321,
@@ -154,7 +148,7 @@ class TroubleTicketServiceTest {
 
         ArgumentCaptor<TroubleTicketEntity> captor =
                 ArgumentCaptor.forClass(TroubleTicketEntity.class);
-        verify(troubleTicketRepository).save(captor.capture());
+        verify(ticketPersistence).persist(captor.capture());
 
         TroubleTicketEntity saved = captor.getValue();
         assertEquals(TENANT_ID, saved.getTenantId());
@@ -247,6 +241,7 @@ class TroubleTicketServiceTest {
                 "new summary for the ticket",
                 TroubleTicketStatus.NEW
         );
+        ticket.addNote("first note");
 
         when(troubleTicketRepository.findByIdAndTenantId(TICKET_ID, TENANT_ID))
                 .thenReturn(Optional.of(ticket));
