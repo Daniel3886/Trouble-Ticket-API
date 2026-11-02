@@ -2,6 +2,9 @@ spring:
   application:
     name: TroubleTicketApi
 
+  config:
+    import: optional:file:.env[.properties]
+
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/trouble_ticket}
     username: ${POSTGRES_USER:ticket_user}
@@ -16,6 +19,12 @@ spring:
   jackson:
     deserialization:
       fail-on-unknown-properties: true
+
+logging:
+  level:
+    org.hibernate.SQL: DEBUG
+    org.hibernate.tool.schema: DEBUG
+    org.springframework.orm.jpa: INFO
 
 app:
   security:
