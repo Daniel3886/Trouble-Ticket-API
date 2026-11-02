@@ -48,6 +48,7 @@ public class TroubleTicketEntity {
         cascade = CascadeType.ALL,
         orphanRemoval = true
     )
+    @OrderBy("date ASC")
     private List<NoteEntity> notes = new ArrayList<>();
 
     @Version
