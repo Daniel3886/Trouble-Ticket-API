@@ -11,9 +11,12 @@ spring:
     password: ${POSTGRES_PASSWORD:local_dev_password}
     driver-class-name: org.postgresql.Driver
 
+  flyway:
+    locations: ${FLYWAY_LOCATIONS:classpath:db/migration}
+
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     show-sql: true
     open-in-view: false
   jackson:

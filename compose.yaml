@@ -25,5 +25,6 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-ticket_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local_dev_password}
       JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-me-1234567890}
+      FLYWAY_LOCATIONS: classpath:db/migration,classpath:db/seed
     ports:
       - "8080:8080"
