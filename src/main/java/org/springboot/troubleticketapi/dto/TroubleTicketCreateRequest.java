@@ -9,11 +9,12 @@ import org.hibernate.validator.constraints.Length;
 public record TroubleTicketCreateRequest(
 
         @NotBlank
+        @Length(max = 255)
         String externalId,
 
         @NotNull
         @Positive
-        long serviceId,
+        Long serviceId,
 
         @NotBlank
         @Length(min = 1, max = 5000, message = "Description must be between 1 and 5000 characters")

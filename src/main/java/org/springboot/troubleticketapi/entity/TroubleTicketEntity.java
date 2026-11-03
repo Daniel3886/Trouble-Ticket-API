@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.validator.constraints.Length;
 import org.springboot.troubleticketapi.dto.TroubleTicketStatus;
 
 import java.util.ArrayList;
@@ -31,6 +32,7 @@ public class TroubleTicketEntity {
     private String tenantId;
 
     @Column(name = "external_id", nullable = false, updatable = false)
+    @Length(max = 255)
     private String externalId;
 
     @Column(name = "service_id", nullable = false)

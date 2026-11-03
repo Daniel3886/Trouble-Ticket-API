@@ -83,7 +83,7 @@ class TroubleTicketServiceTest {
         TroubleTicketCreateRequest request =
                 new TroubleTicketCreateRequest(
                         "49347def-54b1-44b0-890c-0187018f8273",
-                        987654321,
+                        987654321L,
                         "No data connection",
                         null,
                         "Initial note"
@@ -138,7 +138,7 @@ class TroubleTicketServiceTest {
                 .thenReturn(Optional.empty());
         TroubleTicketCreateRequest request = new TroubleTicketCreateRequest(
                 "OK-123456",
-                987654321,
+                987654321L,
                 "No data connection",
                 TroubleTicketCreateStatus.NEW,
                 "Initial note"
