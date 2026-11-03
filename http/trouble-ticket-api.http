@@ -1,0 +1,516 @@
+# Trouble Ticket API: every endpoint, happy paths and contract errors.
+#
+# Run the whole file top to bottom ("Run All Requests in File"): later requests
+# reuse the ticket id created by the first one.
+# No environment needs to be selected: all variables are defined right below.
+# Demo services (db/seed): 987654321 tenant-a active, 987654323 tenant-a INACTIVE,
+# 123456789 tenant-b active.
+
+# ---- Variables (in-file, used by every request) ---------------------------
+# Tokens: signed with the local default JWT_SECRET, valid for 1 year. They only work
+# against a local app using that publicly documented dev secret, so they hold no real secret.
+# Regenerate (e.g. after changing JWT_SECRET in .env):
+#   ./gradlew -q generateToken -PttlSeconds=31536000                     -> tokenA
+#   ./gradlew -q generateToken -Ptenant=tenant-b -PttlSeconds=31536000   -> tokenB
+#   ./gradlew -q generateToken -Ptenant= -PttlSeconds=31536000           -> tokenNoTenant
+@baseUrl = http://localhost:8080/api/v1
+@tokenA = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJsb2NhbC1yZXZpZXdlciIsInRlbmFudF9pZCI6InRlbmFudC1hIiwiaWF0IjoxNzkzNzMxMDc0LCJleHAiOjE4MjUyNjcwNzR9.4xuoK9M0DBSHCf9QyYsz_P6jv65FqgVGpHifqmggs9o
+@tokenB = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJsb2NhbC1yZXZpZXdlciIsInRlbmFudF9pZCI6InRlbmFudC1iIiwiaWF0IjoxNzkzNzMxMDc0LCJleHAiOjE4MjUyNjcwNzR9.O6-xWdnLveWF_hbQJxTMdjZm_BLpAsbKuslph2wpv_4
+@tokenNoTenant = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJsb2NhbC1yZXZpZXdlciIsInRlbmFudF9pZCI6IiIsImlhdCI6MTc5MzczMTA3NCwiZXhwIjoxODI1MjY3MDc0fQ.LVf5TmPFfVn8wgomDEwy1-hFZrYZKbo4x27abxySI-E
+
+#######################################################################
+# 1. CREATE  POST /troubleTicket
+#######################################################################
+
+### 1.1 Create ticket -> 201 Created + Location
+POST {{baseUrl}}/troubleTicket
+Authorization: Bearer {{tokenA}}
+Content-Type: application/json
+
+{
+  "externalId": "OK-{{$uuid}}",
+  "serviceId": 987654321,
+  "description": "Brak transmisji danych dla usługi klienta.",
+  "status": "new",
+  "note": "Zgłoszenie utworzone przez konto API partnera."
+}
+
+> {%
+    client.test("201 Created", () => client.assert(response.status === 201, "got " + response.status));
+    client.test("Location points to the new ticket", () => {
+        const location = response.headers.valueOf("Location");
+        client.assert(location === "/api/v1/troubleTicket/" + response.body.id, "Location: " + location);
+    });
+    client.test("Full TroubleTicket representation", () => {
+        const t = response.body;
+        client.assert(t.id && t.externalId && t.serviceId === 987654321 && t.description, "missing fields");
+        client.assert(t.status === "new" || t.status === "acknowledged", "status: " + t.status);
+    });
+    client.test("Initial note is notes[0]", () => {
+        client.assert(response.body.notes.length === 1, "notes: " + response.body.notes.length);
+        client.assert(response.body.notes[0].text === "Zgłoszenie utworzone przez konto API partnera.");
+        client.assert(response.body.notes[0].id && response.body.notes[0].date, "note id/date missing");
+    });
+    client.global.set("ticketId", response.body.id);
+    client.global.set("externalId", response.body.externalId);
+%}
+
+### 1.2 Same (tenant, externalId) again -> 200 OK, existing ticket unchanged
+POST {{baseUrl}}/troubleTicket
+Authorization: Bearer {{tokenA}}
+Content-Type: application/json
+
+{
+  "externalId": "{{externalId}}",
+  "serviceId": 987654322,
+  "description": "A different description that must be ignored",
+  "status": "new",
+  "note": "A different note that must be ignored"
+}
+
+> {%
+    client.test("200 OK (idempotent)", () => client.assert(response.status === 200, "got " + response.status));
+    client.test("Same ticket returned", () => client.assert(response.body.id === client.global.get("ticketId")));
+    client.test("Location header present", () => client.assert(response.headers.valueOf("Location")));
+    client.test("Original data not overwritten", () => {
+        client.assert(response.body.serviceId === 987654321, "serviceId changed");
+        client.assert(response.body.notes.length === 1, "extra note added");
+    });
+%}
+
+### 1.3 Status other than "new" -> 400 VALIDATION_ERROR
+POST {{baseUrl}}/troubleTicket
+Authorization: Bearer {{tokenA}}
+Content-Type: application/json
+
+{
+  "externalId": "OK-{{$uuid}}",
+  "serviceId": 987654321,
+  "description": "d",
+  "status": "closed",
+  "note": "n"
+}
+
+> {%
+    client.test("400 VALIDATION_ERROR", () => {
+        client.assert(response.status === 400, "got " + response.status);
+        client.assert(response.body.code === "VALIDATION_ERROR", "code: " + response.body.code);
+        client.assert(response.body.message && response.body.requestId, "Error shape");
+    });
+%}
+
+### 1.4 Missing required field (note) -> 400 VALIDATION_ERROR
+POST {{baseUrl}}/troubleTicket
+Authorization: Bearer {{tokenA}}
+Content-Type: application/json
+
+{
+  "externalId": "OK-{{$uuid}}",
+  "serviceId": 987654321,
+  "description": "d",
+  "status": "new"
+}
+
+> {%
+    client.test("400 VALIDATION_ERROR", () => {
+        client.assert(response.status === 400, "got " + response.status);
+        client.assert(response.body.code === "VALIDATION_ERROR", "code: " + response.body.code);
+    });
+%}
+
+### 1.5 Unknown field (additionalProperties: false) -> 400 VALIDATION_ERROR
+POST {{baseUrl}}/troubleTicket
+Authorization: Bearer {{tokenA}}
+Content-Type: application/json
+
+{
+  "externalId": "OK-{{$uuid}}",
+  "serviceId": 987654321,
+  "description": "d",
+  "status": "new",
+  "note": "n",
+  "priority": "high"
+}
+
+> {%
+    client.test("400 VALIDATION_ERROR", () => {
+        client.assert(response.status === 400, "got " + response.status);
+        client.assert(response.body.code === "VALIDATION_ERROR", "code: " + response.body.code);
+    });
+%}
+
+### 1.6 Wrong type (serviceId as text) -> 400 VALIDATION_ERROR
+POST {{baseUrl}}/troubleTicket
+Authorization: Bearer {{tokenA}}
+Content-Type: application/json
+
+{
+  "externalId": "OK-{{$uuid}}",
+  "serviceId": "abc",
+  "description": "d",
+  "status": "new",
+  "note": "n"
+}
+
+> {%
+    client.test("400 VALIDATION_ERROR", () => {
+        client.assert(response.status === 400, "got " + response.status);
+        client.assert(response.body.code === "VALIDATION_ERROR", "code: " + response.body.code);
+    });
+%}
+
+### 1.7 serviceId below minimum (0) -> 400 VALIDATION_ERROR
+POST {{baseUrl}}/troubleTicket
+Authorization: Bearer {{tokenA}}
+Content-Type: application/json
+
+{
+  "externalId": "OK-{{$uuid}}",
+  "serviceId": 0,
+  "description": "d",
+  "status": "new",
+  "note": "n"
+}
+
+> {%
+    client.test("400 VALIDATION_ERROR", () => {
+        client.assert(response.status === 400, "got " + response.status);
+        client.assert(response.body.code === "VALIDATION_ERROR", "code: " + response.body.code);
+    });
+%}
+
+### 1.8 Malformed JSON -> 400 VALIDATION_ERROR
+POST {{baseUrl}}/troubleTicket
+Authorization: Bearer {{tokenA}}
+Content-Type: application/json
+
+{ "externalId": "OK-1",
+
+> {%
+    client.test("400 VALIDATION_ERROR", () => {
+        client.assert(response.status === 400, "got " + response.status);
+        client.assert(response.body.code === "VALIDATION_ERROR", "code: " + response.body.code);
+    });
+%}
+
+### 1.9 Inactive service -> 404 SERVICE_NOT_FOUND
+POST {{baseUrl}}/troubleTicket
+Authorization: Bearer {{tokenA}}
+Content-Type: application/json
+
+{
+  "externalId": "OK-{{$uuid}}",
+  "serviceId": 987654323,
+  "description": "d",
+  "status": "new",
+  "note": "n"
+}
+
+> {%
+    client.test("404 SERVICE_NOT_FOUND", () => {
+        client.assert(response.status === 404, "got " + response.status);
+        client.assert(response.body.code === "SERVICE_NOT_FOUND", "code: " + response.body.code);
+    });
+%}
+
+### 1.10 Service of another tenant -> 404 SERVICE_NOT_FOUND
+POST {{baseUrl}}/troubleTicket
+Authorization: Bearer {{tokenA}}
+Content-Type: application/json
+
+{
+  "externalId": "OK-{{$uuid}}",
+  "serviceId": 123456789,
+  "description": "d",
+  "status": "new",
+  "note": "n"
+}
+
+> {%
+    client.test("404 SERVICE_NOT_FOUND", () => {
+        client.assert(response.status === 404, "got " + response.status);
+        client.assert(response.body.code === "SERVICE_NOT_FOUND", "code: " + response.body.code);
+    });
+%}
+
+### 1.11 Non-existent service -> 404 SERVICE_NOT_FOUND
+POST {{baseUrl}}/troubleTicket
+Authorization: Bearer {{tokenA}}
+Content-Type: application/json
+
+{
+  "externalId": "OK-{{$uuid}}",
+  "serviceId": 1,
+  "description": "d",
+  "status": "new",
+  "note": "n"
+}
+
+> {%
+    client.test("404 SERVICE_NOT_FOUND", () => {
+        client.assert(response.status === 404, "got " + response.status);
+        client.assert(response.body.code === "SERVICE_NOT_FOUND", "code: " + response.body.code);
+    });
+%}
+
+#######################################################################
+# 2. LIST  GET /troubleTicket
+#######################################################################
+
+### 2.1 List own tickets -> 200, summary fields only
+GET {{baseUrl}}/troubleTicket
+Authorization: Bearer {{tokenA}}
+
+> {%
+    client.test("200 OK, array", () => {
+        client.assert(response.status === 200, "got " + response.status);
+        client.assert(Array.isArray(response.body), "not an array");
+    });
+    client.test("Contains the created ticket", () => {
+        client.assert(response.body.some(t => t.externalId === client.global.get("externalId")));
+    });
+    client.test("Only externalId, serviceId, description, status", () => {
+        const keys = Object.keys(response.body[0]).sort().join(",");
+        client.assert(keys === "description,externalId,serviceId,status", "keys: " + keys);
+    });
+%}
+
+### 2.2 Other tenant does not see tenant-a tickets -> 200 without them
+GET {{baseUrl}}/troubleTicket
+Authorization: Bearer {{tokenB}}
+
+> {%
+    client.test("200 OK", () => client.assert(response.status === 200, "got " + response.status));
+    client.test("tenant-a ticket not visible", () => {
+        client.assert(!response.body.some(t => t.externalId === client.global.get("externalId")));
+    });
+%}
+
+#######################################################################
+# 3. GET ONE  GET /troubleTicket/{id}
+#######################################################################
+
+### 3.1 Get own ticket -> 200 full representation
+GET {{baseUrl}}/troubleTicket/{{ticketId}}
+Authorization: Bearer {{tokenA}}
+
+> {%
+    client.test("200 OK", () => client.assert(response.status === 200, "got " + response.status));
+    client.test("Same ticket with notes", () => {
+        client.assert(response.body.id === client.global.get("ticketId"));
+        client.assert(Array.isArray(response.body.notes) && response.body.notes.length >= 1);
+    });
+%}
+
+### 3.2 Unknown id -> 404 TROUBLE_TICKET_NOT_FOUND
+GET {{baseUrl}}/troubleTicket/does-not-exist
+Authorization: Bearer {{tokenA}}
+
+> {%
+    client.test("404 TROUBLE_TICKET_NOT_FOUND", () => {
+        client.assert(response.status === 404, "got " + response.status);
+        client.assert(response.body.code === "TROUBLE_TICKET_NOT_FOUND", "code: " + response.body.code);
+    });
+%}
+
+### 3.3 Other tenant's ticket -> 404 (existence is not revealed)
+GET {{baseUrl}}/troubleTicket/{{ticketId}}
+Authorization: Bearer {{tokenB}}
+
+> {%
+    client.test("404 TROUBLE_TICKET_NOT_FOUND", () => {
+        client.assert(response.status === 404, "got " + response.status);
+        client.assert(response.body.code === "TROUBLE_TICKET_NOT_FOUND", "code: " + response.body.code);
+    });
+%}
+
+#######################################################################
+# 4. ADD NOTE  POST /troubleTicket/{id}/note
+#######################################################################
+
+### 4.1 Add note -> 201 with exactly that note
+POST {{baseUrl}}/troubleTicket/{{ticketId}}/note
+Authorization: Bearer {{tokenA}}
+Content-Type: application/json
+
+{
+  "text": "Klient prosi o potwierdzenie planowanego terminu zamknięcia."
+}
+
+> {%
+    client.test("201 Created", () => client.assert(response.status === 201, "got " + response.status));
+    client.test("Returns the new Note", () => {
+        client.assert(response.body.text === "Klient prosi o potwierdzenie planowanego terminu zamknięcia.");
+        client.assert(response.body.id && response.body.date, "id/date missing");
+    });
+%}
+
+### 4.2 Empty text -> 400 VALIDATION_ERROR
+POST {{baseUrl}}/troubleTicket/{{ticketId}}/note
+Authorization: Bearer {{tokenA}}
+Content-Type: application/json
+
+{
+  "text": ""
+}
+
+> {%
+    client.test("400 VALIDATION_ERROR", () => {
+        client.assert(response.status === 400, "got " + response.status);
+        client.assert(response.body.code === "VALIDATION_ERROR", "code: " + response.body.code);
+    });
+%}
+
+### 4.3 Note on unknown ticket -> 404 TROUBLE_TICKET_NOT_FOUND
+POST {{baseUrl}}/troubleTicket/does-not-exist/note
+Authorization: Bearer {{tokenA}}
+Content-Type: application/json
+
+{
+  "text": "t"
+}
+
+> {%
+    client.test("404 TROUBLE_TICKET_NOT_FOUND", () => {
+        client.assert(response.status === 404, "got " + response.status);
+        client.assert(response.body.code === "TROUBLE_TICKET_NOT_FOUND", "code: " + response.body.code);
+    });
+%}
+
+#######################################################################
+# 5. CLOSE  PATCH /troubleTicket/{id}
+#######################################################################
+
+### 5.1 Any status other than "closed" -> 400 VALIDATION_ERROR
+PATCH {{baseUrl}}/troubleTicket/{{ticketId}}
+Authorization: Bearer {{tokenA}}
+Content-Type: application/json
+
+{
+  "status": "inProgress"
+}
+
+> {%
+    client.test("400 VALIDATION_ERROR", () => {
+        client.assert(response.status === 400, "got " + response.status);
+        client.assert(response.body.code === "VALIDATION_ERROR", "code: " + response.body.code);
+    });
+%}
+
+### 5.2 Missing status -> 400 VALIDATION_ERROR
+PATCH {{baseUrl}}/troubleTicket/{{ticketId}}
+Authorization: Bearer {{tokenA}}
+Content-Type: application/json
+
+{}
+
+> {%
+    client.test("400 VALIDATION_ERROR", () => {
+        client.assert(response.status === 400, "got " + response.status);
+        client.assert(response.body.code === "VALIDATION_ERROR", "code: " + response.body.code);
+    });
+%}
+
+### 5.3 Other tenant closes tenant-a ticket -> 404 TROUBLE_TICKET_NOT_FOUND
+PATCH {{baseUrl}}/troubleTicket/{{ticketId}}
+Authorization: Bearer {{tokenB}}
+Content-Type: application/json
+
+{
+  "status": "closed"
+}
+
+> {%
+    client.test("404 TROUBLE_TICKET_NOT_FOUND", () => {
+        client.assert(response.status === 404, "got " + response.status);
+        client.assert(response.body.code === "TROUBLE_TICKET_NOT_FOUND", "code: " + response.body.code);
+    });
+%}
+
+### 5.4 Close -> 200 with status "closed"
+PATCH {{baseUrl}}/troubleTicket/{{ticketId}}
+Authorization: Bearer {{tokenA}}
+Content-Type: application/json
+
+{
+  "status": "closed"
+}
+
+> {%
+    client.test("200 OK", () => client.assert(response.status === 200, "got " + response.status));
+    client.test("Status is closed, notes kept in order", () => {
+        client.assert(response.body.status === "closed", "status: " + response.body.status);
+        client.assert(response.body.notes.length === 2, "notes: " + response.body.notes.length);
+        client.assert(response.body.notes[0].text === "Zgłoszenie utworzone przez konto API partnera.");
+    });
+%}
+
+### 5.5 Close again -> 200 (assumption: closing is idempotent, see README)
+PATCH {{baseUrl}}/troubleTicket/{{ticketId}}
+Authorization: Bearer {{tokenA}}
+Content-Type: application/json
+
+{
+  "status": "closed"
+}
+
+> {%
+    client.test("200 OK, still closed", () => {
+        client.assert(response.status === 200, "got " + response.status);
+        client.assert(response.body.status === "closed");
+    });
+%}
+
+### 5.6 Close unknown ticket -> 404 TROUBLE_TICKET_NOT_FOUND
+PATCH {{baseUrl}}/troubleTicket/does-not-exist
+Authorization: Bearer {{tokenA}}
+Content-Type: application/json
+
+{
+  "status": "closed"
+}
+
+> {%
+    client.test("404 TROUBLE_TICKET_NOT_FOUND", () => {
+        client.assert(response.status === 404, "got " + response.status);
+        client.assert(response.body.code === "TROUBLE_TICKET_NOT_FOUND", "code: " + response.body.code);
+    });
+%}
+
+#######################################################################
+# 6. AUTHENTICATION / AUTHORIZATION (any endpoint)
+#######################################################################
+
+### 6.1 No token -> 401 UNAUTHORIZED
+GET {{baseUrl}}/troubleTicket
+
+> {%
+    client.test("401 UNAUTHORIZED", () => {
+        client.assert(response.status === 401, "got " + response.status);
+        client.assert(response.body.code === "UNAUTHORIZED", "code: " + response.body.code);
+        client.assert(response.body.requestId === response.headers.valueOf("X-Request-ID"), "requestId != X-Request-ID");
+    });
+%}
+
+### 6.2 Invalid (tampered) token -> 401 UNAUTHORIZED
+GET {{baseUrl}}/troubleTicket
+Authorization: Bearer {{tokenA}}tampered
+
+> {%
+    client.test("401 UNAUTHORIZED", () => {
+        client.assert(response.status === 401, "got " + response.status);
+        client.assert(response.body.code === "UNAUTHORIZED", "code: " + response.body.code);
+    });
+%}
+
+### 6.3 Valid token without tenant_id -> 403
+# Note: the app returns code MISSING_TENANT; the spec's Forbidden example uses FORBIDDEN.
+GET {{baseUrl}}/troubleTicket
+Authorization: Bearer {{tokenNoTenant}}
+
+> {%
+    client.test("403 Forbidden in Error format", () => {
+        client.assert(response.status === 403, "got " + response.status);
+        client.assert(response.body.code && response.body.message, "Error shape");
+    });
+%}
