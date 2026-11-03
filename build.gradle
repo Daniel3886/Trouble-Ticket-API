@@ -35,3 +35,55 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
 }
+
+// Local test token: ./gradlew -q generateToken
+// Signs an HS256 JWT with the same secret the app uses, resolved in the same order:
+// JWT_SECRET environment variable, then .env, then the local default from compose.yaml.
+def tokenTenant = providers.gradleProperty('tenant').orElse('tenant-a')
+def tokenTtlSeconds = providers.gradleProperty('ttlSeconds').orElse('3600')
+def envJwtSecret = providers.environmentVariable('JWT_SECRET')
+def dotEnvFile = layout.projectDirectory.file('.env')
+
+tasks.register('generateToken') {
+    group = 'help'
+    description = 'Prints a signed JWT for calling the local API (see README).'
+    outputs.upToDateWhen { false }
+
+    doLast {
+        String secret = envJwtSecret.getOrNull()
+        String secretSource = 'JWT_SECRET environment variable'
+        File envFile = dotEnvFile.asFile
+        if (!secret && envFile.isFile()) {
+            String line = envFile.readLines().find { it.trim().startsWith('JWT_SECRET=') }
+            if (line) {
+                secret = line.substring(line.indexOf('=') + 1).trim().replaceAll(/^["']|["']$/, '')
+                secretSource = '.env'
+            }
+        }
+        if (!secret) {
+            secret = 'local-dev-secret-change-me-1234567890'
+            secretSource = 'local default (compose.yaml)'
+        }
+        byte[] key = secret.getBytes('UTF-8')
+        if (key.length < 32) {
+            throw new GradleException("JWT_SECRET from ${secretSource} is ${key.length} bytes; HS256 needs at least 32")
+        }
+
+        String tenant = tokenTenant.get()
+        long ttl = tokenTtlSeconds.get() as long
+        long now = System.currentTimeMillis().intdiv(1000)
+
+        def base64Url = { byte[] bytes -> Base64.urlEncoder.withoutPadding().encodeToString(bytes) }
+        String header = base64Url('{"alg":"HS256","typ":"JWT"}'.getBytes('UTF-8'))
+        String claims = JsonOutput.toJson([sub: 'local-reviewer', tenant_id: tenant, iat: now, exp: now + ttl])
+        String payload = base64Url(claims.getBytes('UTF-8'))
+
+        def mac = Mac.getInstance('HmacSHA256')
+        mac.init(new SecretKeySpec(key, 'HmacSHA256'))
+        String signature = base64Url(mac.doFinal((header + '.' + payload).getBytes('UTF-8')))
+
+        println "${header}.${payload}.${signature}"
+        logger.lifecycle("tenant_id=${tenant}, expires in ${ttl}s, secret from ${secretSource}")
+        logger.lifecycle('Use it as the header "Authorization: Bearer <token>" or in Swagger UI → Authorize.')
+    }
+}
