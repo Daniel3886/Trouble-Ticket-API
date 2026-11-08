@@ -1,19 +1,18 @@
 package org.springboot.troubleticketapi.service;
 
+import java.util.List;
+import java.util.Optional;
 import org.springboot.troubleticketapi.dto.*;
 import org.springboot.troubleticketapi.entity.NoteEntity;
 import org.springboot.troubleticketapi.entity.TroubleTicketEntity;
 import org.springboot.troubleticketapi.exception.ServiceNotFoundException;
 import org.springboot.troubleticketapi.exception.TicketNotFoundException;
-import org.springboot.troubleticketapi.repository.TroubleTicketRepository;
 import org.springboot.troubleticketapi.repository.ServiceRepository;
+import org.springboot.troubleticketapi.repository.TroubleTicketRepository;
 import org.springboot.troubleticketapi.security.CurrentTenant;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
-import java.util.Optional;
 
 @Service
 public class TroubleTicketService {
@@ -27,8 +26,7 @@ public class TroubleTicketService {
             TroubleTicketRepository troubleTicketRepository,
             ServiceRepository serviceRepository,
             TicketPersistence ticketPersistence,
-            CurrentTenant currentTenant
-    ) {
+            CurrentTenant currentTenant) {
         this.troubleTicketRepository = troubleTicketRepository;
         this.serviceRepository = serviceRepository;
         this.ticketPersistence = ticketPersistence;
@@ -54,12 +52,7 @@ public class TroubleTicketService {
         }
 
         TroubleTicketEntity troubleTicket = new TroubleTicketEntity(
-                tenantId,
-                request.externalId(),
-                request.serviceId(),
-                request.description(),
-                TroubleTicketStatus.NEW
-        );
+                tenantId, request.externalId(), request.serviceId(), request.description(), TroubleTicketStatus.NEW);
 
         troubleTicket.addNote(request.note());
 
@@ -74,19 +67,12 @@ public class TroubleTicketService {
         }
     }
 
-
-
     public List<TroubleTicketSummary> getTroubleAllTickets() {
         String tenantId = currentTenant.getTenantId();
 
-        return troubleTicketRepository.findAllByTenantId(tenantId)
-                .stream()
+        return troubleTicketRepository.findAllByTenantId(tenantId).stream()
                 .map(ticket -> new TroubleTicketSummary(
-                        ticket.getExternalId(),
-                        ticket.getServiceId(),
-                        ticket.getDescription(),
-                        ticket.getStatus()
-                ))
+                        ticket.getExternalId(), ticket.getServiceId(), ticket.getDescription(), ticket.getStatus()))
                 .toList();
     }
 
@@ -94,25 +80,22 @@ public class TroubleTicketService {
     public TroubleTicket getTroubleTicketById(String id) {
         String tenantId = currentTenant.getTenantId();
 
-        TroubleTicketEntity ticket = troubleTicketRepository.findByIdAndTenantId(id, tenantId)
-                .orElseThrow(
-                        () -> new TicketNotFoundException("Ticket not found with id: " + id)
-                );
+        TroubleTicketEntity ticket = troubleTicketRepository
+                .findByIdAndTenantId(id, tenantId)
+                .orElseThrow(() -> new TicketNotFoundException("Ticket not found with id: " + id));
         return toTroubleTicket(ticket);
     }
 
     @Transactional
-    public TroubleTicket closeTroubleTicket(
-            String id,
-            TroubleTicketCloseStatusRequest request
-    ) {
+    public TroubleTicket closeTroubleTicket(String id, TroubleTicketCloseStatusRequest request) {
         String tenantId = currentTenant.getTenantId();
 
         if (request.status() != TroubleTicketCloseStatus.CLOSED) {
             throw new IllegalArgumentException("Trouble tickets can only be closed with status 'closed'");
         }
 
-        TroubleTicketEntity ticket = troubleTicketRepository.findByIdAndTenantId(id, tenantId)
+        TroubleTicketEntity ticket = troubleTicketRepository
+                .findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() -> new TicketNotFoundException("Trouble ticket not found: " + id));
 
         ticket.close();
@@ -123,7 +106,8 @@ public class TroubleTicketService {
     public Note addTroubleTicketNote(String id, NoteCreateRequest request) {
         String tenantId = currentTenant.getTenantId();
 
-        TroubleTicketEntity ticket = troubleTicketRepository.findByIdAndTenantId(id, tenantId)
+        TroubleTicketEntity ticket = troubleTicketRepository
+                .findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() -> new TicketNotFoundException("Ticket not found with id: " + id));
 
         NoteEntity note = ticket.addNote(request.text());
@@ -139,22 +123,14 @@ public class TroubleTicketService {
                 savedTicket.getServiceId(),
                 savedTicket.getDescription(),
                 savedTicket.getStatus(),
-                mapNotes(savedTicket.getNotes())
-        );
+                mapNotes(savedTicket.getNotes()));
     }
 
-
     private List<Note> mapNotes(List<NoteEntity> notes) {
-        return notes.stream()
-                .map(this::toNote)
-                .toList();
+        return notes.stream().map(this::toNote).toList();
     }
 
     private Note toNote(NoteEntity note) {
-        return new Note(
-                note.getId(),
-                note.getText(),
-                note.getDate()
-        );
+        return new Note(note.getId(), note.getText(), note.getDate());
     }
 }

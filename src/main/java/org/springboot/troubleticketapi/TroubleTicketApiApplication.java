@@ -9,5 +9,4 @@ public class TroubleTicketApiApplication {
     public static void main(String[] args) {
         SpringApplication.run(TroubleTicketApiApplication.class, args);
     }
-
 }

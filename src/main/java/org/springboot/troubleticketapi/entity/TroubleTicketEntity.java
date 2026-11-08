@@ -1,23 +1,21 @@
 package org.springboot.troubleticketapi.entity;
 
 import jakarta.persistence.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.validator.constraints.Length;
 import org.springboot.troubleticketapi.dto.TroubleTicketStatus;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
-
 @Table(
         name = "trouble_tickets",
-        uniqueConstraints = @UniqueConstraint(
-                name = "unique_tenant_external_id",
-                columnNames = {"tenant_id", "external_id"}
-        )
-)
+        uniqueConstraints =
+                @UniqueConstraint(
+                        name = "unique_tenant_external_id",
+                        columnNames = {"tenant_id", "external_id"}))
 @Entity
 @Getter
 @Setter
@@ -45,11 +43,7 @@ public class TroubleTicketEntity {
     @Column(nullable = false, length = 20)
     private TroubleTicketStatus status;
 
-    @OneToMany(
-        mappedBy = "troubleTicket",
-        cascade = CascadeType.ALL,
-        orphanRemoval = true
-    )
+    @OneToMany(mappedBy = "troubleTicket", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("date ASC")
     private List<NoteEntity> notes = new ArrayList<>();
 
@@ -57,12 +51,7 @@ public class TroubleTicketEntity {
     private Long version;
 
     public TroubleTicketEntity(
-            String tenantId,
-            String externalId,
-            long serviceId,
-            String description,
-            TroubleTicketStatus status
-    ) {
+            String tenantId, String externalId, long serviceId, String description, TroubleTicketStatus status) {
         this.id = UUID.randomUUID().toString();
         this.tenantId = tenantId;
         this.externalId = externalId;

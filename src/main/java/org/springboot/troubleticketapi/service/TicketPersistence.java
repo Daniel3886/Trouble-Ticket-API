@@ -10,12 +10,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class TicketPersistence {
     private final TroubleTicketRepository troubleTicketRepository;
 
-    TicketPersistence(TroubleTicketRepository troubleTicketRepository){
+    TicketPersistence(TroubleTicketRepository troubleTicketRepository) {
         this.troubleTicketRepository = troubleTicketRepository;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    TroubleTicketEntity persist(TroubleTicketEntity ticket){
+    TroubleTicketEntity persist(TroubleTicketEntity ticket) {
         return troubleTicketRepository.saveAndFlush(ticket);
     }
 }

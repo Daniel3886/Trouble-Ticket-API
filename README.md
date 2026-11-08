@@ -2,7 +2,7 @@
 
 Implementacja backendowa kontraktu `trouble-ticket-api.yaml`
 
-Technologie: Java 21, Spring Boot 4, Spring Security (OAuth2 Resource Server, JWT), Spring Data JPA, Flyway, PostgreSQL 17, Gradle.
+Technologie: Java 21, Spring Boot 4, Spring Security (OAuth2 Resource Server, JWT), Spring Data JPA, Flyway, PostgreSQL 17, Gradle, Spotless (palantir-java-format).
 
 Kontrakt API (źródło prawdy dla implementacji): [`src/main/resources/trouble-ticket-api.yaml`](src/main/resources/trouble-ticket-api.yaml). Plik jest oryginalną specyfikacją z zadania, bez zmian.
 
@@ -162,6 +162,17 @@ Szczegóły i tabela oczekiwanych odpowiedzi: [`http/README.md`](http/README.md)
 `./gradlew test` uruchamia wyłącznie testy jednostkowe, więc nie wymaga bazy danych ani Dockera.
 
 Obraz Dockera buduje wyłącznie plik jar poleceniem `./gradlew bootJar`, które nie uruchamia testów. Testy uruchamia się osobno (`./gradlew test`), dzięki czemu `docker compose up --build` pozostaje szybkie.
+
+## Styl kodu
+
+Formatowanie wymusza Spotless z palantir-java-format (styl google-java-format, 120 znaków w linii, wcięcie 4 spacje), więc styl nie zależy od ustawień IDE ani od osoby piszącej kod.
+
+```bash
+./gradlew spotlessApply   # formatuje kod
+./gradlew check           # testy + kontrola formatowania; niesformatowany kod kończy się błędem
+```
+
+W IntelliJ IDEA ten sam format daje wtyczka palantir-java-format (włączona w ustawieniach wtyczki), dzięki czemu skrót formatowania w IDE i Spotless dają identyczny wynik.
 
 ## Decyzje i założenia
 

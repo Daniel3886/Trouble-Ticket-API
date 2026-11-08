@@ -1,13 +1,12 @@
 package org.springboot.troubleticketapi.entity;
 
 import jakarta.persistence.*;
+import java.time.Instant;
+import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
-import java.time.Instant;
-import java.util.UUID;
 
 @Table(name = "notes")
 @Entity
@@ -27,9 +26,7 @@ public class NoteEntity {
     @Column(nullable = false, updatable = false)
     private Instant date;
 
-    @ManyToOne(
-            fetch = FetchType.LAZY, optional = false
-    )
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "trouble_ticket_id", nullable = false)
     private TroubleTicketEntity troubleTicket;
 

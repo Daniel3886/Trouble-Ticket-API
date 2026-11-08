@@ -10,18 +10,15 @@ import org.springframework.stereotype.Component;
 public class CurrentTenant {
 
     public String getTenantId() {
-        Authentication authentication =
-                SecurityContextHolder.getContext().getAuthentication();
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
-        if(!(authentication instanceof JwtAuthenticationToken jwtAuthentication)) {
+        if (!(authentication instanceof JwtAuthenticationToken jwtAuthentication)) {
             throw new IllegalStateException("No JWT authentication is avaliable");
         }
 
-        String tenantId = jwtAuthentication
-                .getToken()
-                .getClaimAsString("tenant_id");
+        String tenantId = jwtAuthentication.getToken().getClaimAsString("tenant_id");
 
-        if(tenantId == null || tenantId.isBlank()) {
+        if (tenantId == null || tenantId.isBlank()) {
             throw new MissingTenantException();
         }
 
