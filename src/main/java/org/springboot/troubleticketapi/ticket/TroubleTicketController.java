@@ -1,16 +1,14 @@
-package org.springboot.troubleticketapi.controller;
+package org.springboot.troubleticketapi.ticket;
 
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
-import org.springboot.troubleticketapi.dto.*;
-import org.springboot.troubleticketapi.service.TroubleTicketService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RequestMapping("/api/v1/troubleTicket")
 @RestController
-public class TroubleTicketController {
+class TroubleTicketController {
 
     private final TroubleTicketService troubleTicketService;
 

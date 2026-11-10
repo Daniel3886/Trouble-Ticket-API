@@ -1,4 +1,4 @@
-package org.springboot.troubleticketapi.exception;
+package org.springboot.troubleticketapi.security;
 
 public class MissingTenantException extends RuntimeException {
     public MissingTenantException() {

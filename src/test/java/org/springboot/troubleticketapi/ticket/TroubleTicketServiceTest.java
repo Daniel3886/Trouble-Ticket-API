@@ -1,4 +1,4 @@
-package org.springboot.troubleticketapi.service;
+package org.springboot.troubleticketapi.ticket;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -13,13 +13,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springboot.troubleticketapi.dto.*;
-import org.springboot.troubleticketapi.entity.TroubleTicketEntity;
-import org.springboot.troubleticketapi.exception.ServiceNotFoundException;
-import org.springboot.troubleticketapi.exception.TicketNotFoundException;
-import org.springboot.troubleticketapi.repository.ServiceRepository;
-import org.springboot.troubleticketapi.repository.TroubleTicketRepository;
 import org.springboot.troubleticketapi.security.CurrentTenant;
+import org.springboot.troubleticketapi.servicecatalog.ServiceCatalog;
+import org.springboot.troubleticketapi.servicecatalog.ServiceNotFoundException;
 
 @ExtendWith(MockitoExtension.class)
 class TroubleTicketServiceTest {
@@ -28,7 +24,7 @@ class TroubleTicketServiceTest {
     TroubleTicketRepository troubleTicketRepository;
 
     @Mock
-    ServiceRepository serviceRepository;
+    ServiceCatalog serviceCatalog;
 
     @Mock
     TicketPersistence ticketPersistence;
@@ -45,9 +41,6 @@ class TroubleTicketServiceTest {
     @BeforeEach
     void setUp() {
         when(tenant.getTenantId()).thenReturn(TENANT_ID);
-        lenient()
-                .when(serviceRepository.existsByIdAndTenantIdAndActiveTrue(anyLong(), eq(TENANT_ID)))
-                .thenReturn(true);
         lenient()
                 .when(ticketPersistence.persist(any(TroubleTicketEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -131,15 +124,16 @@ class TroubleTicketServiceTest {
     void shouldThrowServiceNotFoundExceptionWhenServiceDoesNotExist() {
         when(troubleTicketRepository.findByTenantIdAndExternalId(TENANT_ID, "OK-123456"))
                 .thenReturn(Optional.empty());
-        when(serviceRepository.existsByIdAndTenantIdAndActiveTrue(987654321L, TENANT_ID))
-                .thenReturn(false);
+        doThrow(new ServiceNotFoundException(987654321L))
+                .when(serviceCatalog)
+                .requireActiveService(987654321L, TENANT_ID);
 
         TroubleTicketCreateRequest request = new TroubleTicketCreateRequest(
                 "OK-123456", 987654321L, "No data connection", TroubleTicketCreateStatus.NEW, "Initial note");
 
         assertThrows(ServiceNotFoundException.class, () -> troubleTicketService.createTroubleTicket(request));
 
-        verify(serviceRepository).existsByIdAndTenantIdAndActiveTrue(987654321L, TENANT_ID);
+        verify(serviceCatalog).requireActiveService(987654321L, TENANT_ID);
         verify(troubleTicketRepository, never()).save(any());
     }
 

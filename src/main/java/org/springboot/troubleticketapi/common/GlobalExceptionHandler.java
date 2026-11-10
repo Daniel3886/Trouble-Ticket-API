@@ -1,10 +1,11 @@
-package org.springboot.troubleticketapi.exception;
+package org.springboot.troubleticketapi.common;
 
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.Objects;
 import java.util.stream.Collectors;
-import org.springboot.troubleticketapi.dto.Error;
-import org.springboot.troubleticketapi.security.RequestIdFilter;
+import org.springboot.troubleticketapi.security.MissingTenantException;
+import org.springboot.troubleticketapi.servicecatalog.ServiceNotFoundException;
+import org.springboot.troubleticketapi.ticket.TicketNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -16,7 +17,7 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.exc.UnrecognizedPropertyException;
 
 @RestControllerAdvice
-public class GlobalExceptionHandler {
+class GlobalExceptionHandler {
 
     @ExceptionHandler(TicketNotFoundException.class)
     public ResponseEntity<Error> handleTroubleTicketNotFound(TicketNotFoundException e, HttpServletRequest request) {

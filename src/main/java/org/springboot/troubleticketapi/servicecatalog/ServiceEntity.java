@@ -1,4 +1,4 @@
-package org.springboot.troubleticketapi.entity;
+package org.springboot.troubleticketapi.servicecatalog;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -11,7 +11,7 @@ import lombok.NoArgsConstructor;
 @Table(name = "services")
 @Getter
 @NoArgsConstructor
-public class ServiceEntity {
+class ServiceEntity {
 
     @Id
     private Long id;

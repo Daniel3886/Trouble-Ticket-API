@@ -1,6 +1,5 @@
 package org.springboot.troubleticketapi.security;
 
-import org.springboot.troubleticketapi.exception.MissingTenantException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;

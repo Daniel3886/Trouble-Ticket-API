@@ -1,34 +1,28 @@
-package org.springboot.troubleticketapi.service;
+package org.springboot.troubleticketapi.ticket;
 
 import java.util.List;
 import java.util.Optional;
-import org.springboot.troubleticketapi.dto.*;
-import org.springboot.troubleticketapi.entity.NoteEntity;
-import org.springboot.troubleticketapi.entity.TroubleTicketEntity;
-import org.springboot.troubleticketapi.exception.ServiceNotFoundException;
-import org.springboot.troubleticketapi.exception.TicketNotFoundException;
-import org.springboot.troubleticketapi.repository.ServiceRepository;
-import org.springboot.troubleticketapi.repository.TroubleTicketRepository;
 import org.springboot.troubleticketapi.security.CurrentTenant;
+import org.springboot.troubleticketapi.servicecatalog.ServiceCatalog;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class TroubleTicketService {
+class TroubleTicketService {
 
     private final TroubleTicketRepository troubleTicketRepository;
-    private final ServiceRepository serviceRepository;
+    private final ServiceCatalog serviceCatalog;
     private final TicketPersistence ticketPersistence;
     private final CurrentTenant currentTenant;
 
     public TroubleTicketService(
             TroubleTicketRepository troubleTicketRepository,
-            ServiceRepository serviceRepository,
+            ServiceCatalog serviceCatalog,
             TicketPersistence ticketPersistence,
             CurrentTenant currentTenant) {
         this.troubleTicketRepository = troubleTicketRepository;
-        this.serviceRepository = serviceRepository;
+        this.serviceCatalog = serviceCatalog;
         this.ticketPersistence = ticketPersistence;
         this.currentTenant = currentTenant;
     }
@@ -47,9 +41,7 @@ public class TroubleTicketService {
             return new CreateResult(toTroubleTicket(existing.get()), false);
         }
 
-        if (!serviceRepository.existsByIdAndTenantIdAndActiveTrue(request.serviceId(), tenantId)) {
-            throw new ServiceNotFoundException(request.serviceId());
-        }
+        serviceCatalog.requireActiveService(request.serviceId(), tenantId);
 
         TroubleTicketEntity troubleTicket = new TroubleTicketEntity(
                 tenantId, request.externalId(), request.serviceId(), request.description(), TroubleTicketStatus.NEW);

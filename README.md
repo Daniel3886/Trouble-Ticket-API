@@ -18,16 +18,21 @@ Kontrakt API (źródło prawdy dla implementacji): [`src/main/resources/trouble-
 
 ## Struktura projektu
 
+Kod jest podzielony według funkcjonalności biznesowej (package-by-feature), a nie według warstw technicznych.
+Klasa jest `public` tylko wtedy, gdy używa jej kod z innego pakietu; pozostałe są pakietowo-prywatne,
+więc granice między funkcjonalnościami pilnuje kompilator.
+
 ```
 src/main/java/org/springboot/troubleticketapi/
-├── controller/   # TroubleTicketController – warstwa HTTP, kody 200/201, nagłówek Location
-├── service/      # TroubleTicketService – logika biznesowa, idempotencja, izolacja tenantów
-│                 # TicketPersistence – zapis w osobnej transakcji (obsługa wyścigu przy tworzeniu)
-├── repository/   # Spring Data JPA, każde zapytanie o zgłoszenie zawiera tenantId
-├── entity/       # Encje JPA: TroubleTicketEntity, NoteEntity, ServiceEntity
-├── dto/          # Rekordy odpowiadające schematom z kontraktu + enumy statusów
-├── security/     # Konfiguracja JWT, CurrentTenant, RequestIdFilter, błędy 401/403 w formacie Error
-└── exception/    # Wyjątki domenowe i GlobalExceptionHandler (mapowanie na Error)
+├── ticket/           # Zgłoszenia: kontroler, serwis (idempotencja, izolacja tenantów), encje zgłoszenia
+│                     # i notatek, repozytorium, rekordy żądań/odpowiedzi, enumy statusów.
+│                     # Notatka istnieje tylko w ramach zgłoszenia, więc nie ma osobnego pakietu ani repozytorium.
+│                     # Publiczny jest tylko TicketNotFoundException (obsługiwany w common).
+├── servicecatalog/   # Usługi tenantów (tabela services). Na zewnątrz widoczny tylko ServiceCatalog
+│                     # (requireActiveService) i ServiceNotFoundException; encja i repozytorium są ukryte.
+├── security/         # Konfiguracja JWT, CurrentTenant (tenant z claimu tenant_id), błędy 401/403 w formacie Error
+└── common/           # Elementy wspólne dla wszystkich funkcjonalności: GlobalExceptionHandler,
+                      # rekord Error, RequestIdFilter (nagłówek X-Request-ID)
 
 src/main/resources/
 ├── application.yaml
@@ -150,7 +155,7 @@ Szczegóły i tabela oczekiwanych odpowiedzi: [`http/README.md`](http/README.md)
 ./gradlew test
 ```
 
-- **`TroubleTicketServiceTest`**: testy jednostkowe serwisu (JUnit 5 + Mockito), bez bazy danych. Repozytoria, `TicketPersistence` i `CurrentTenant` są zamockowane. Obejmują:
+- **`TroubleTicketServiceTest`**: testy jednostkowe serwisu (JUnit 5 + Mockito), bez bazy danych. Repozytorium zgłoszeń, `ServiceCatalog`, `TicketPersistence` i `CurrentTenant` są zamockowane. Obejmują:
   - tworzenie zgłoszenia i przypisanie tenanta z kontekstu uwierzytelnienia,
   - idempotencję: dla istniejącego `(tenantId, externalId)` zwracane jest istniejące zgłoszenie, bez zapisu i bez nadpisania opisu ani notatek,
   - odrzucenie brakującego statusu przy tworzeniu i zamykaniu,
@@ -185,7 +190,7 @@ Unikalność jest wymuszona także w bazie (`unique_tenant_external_id`).
 Tenant wynika wyłącznie z claimu `tenant_id` zweryfikowanego tokenu, nigdy z parametrów żądania. Każde zapytanie o zgłoszenia zawiera `tenantId`. Zgłoszenie innego tenanta jest traktowane jak nieistniejące i zwraca `404 TROUBLE_TICKET_NOT_FOUND`, żeby nie ujawniać istnienia zasobu.
 
 ### Walidacja usługi (`SERVICE_NOT_FOUND`)
-Specyfikacja wymaga `404 SERVICE_NOT_FOUND`, gdy usługa nie istnieje, nie jest aktywna albo nie należy do tenanta. Projekt nie ma dostępu do zewnętrznego katalogu usług, dlatego przyjąłem uproszczenie: tabela `services` (`id`, `tenant_id`, `active`) w tej samej bazie, sprawdzana przez `ServiceRepository`.
+Specyfikacja wymaga `404 SERVICE_NOT_FOUND`, gdy usługa nie istnieje, nie jest aktywna albo nie należy do tenanta. Projekt nie ma dostępu do zewnętrznego katalogu usług, dlatego przyjąłem uproszczenie: tabela `services` (`id`, `tenant_id`, `active`) w tej samej bazie, sprawdzana przez `ServiceCatalog.requireActiveService` (pakiet `servicecatalog`).
 
 Kolejność kroków przy tworzeniu: walidacja żądania (400), wyszukanie istniejącego zgłoszenia (200), walidacja usługi (404), zapis (201). Sprawdzenie usługi następuje celowo po wyszukaniu idempotentnym: ponowienie żądania dla istniejącego zgłoszenia powinno zwrócić `200`, nawet jeśli usługa została w międzyczasie dezaktywowana.
 

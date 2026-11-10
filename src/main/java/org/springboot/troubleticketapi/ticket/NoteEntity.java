@@ -1,4 +1,4 @@
-package org.springboot.troubleticketapi.entity;
+package org.springboot.troubleticketapi.ticket;
 
 import jakarta.persistence.*;
 import java.time.Instant;
@@ -14,7 +14,7 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class NoteEntity {
+class NoteEntity {
 
     @Id
     @Column(nullable = false, updatable = false)

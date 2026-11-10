@@ -1,8 +1,8 @@
-package org.springboot.troubleticketapi.dto;
+package org.springboot.troubleticketapi.ticket;
 
 import java.util.List;
 
-public record TroubleTicket(
+record TroubleTicket(
         String id,
         String externalId,
         Long serviceId,

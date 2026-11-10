@@ -4,12 +4,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import org.springboot.troubleticketapi.dto.Error;
+import org.springboot.troubleticketapi.common.Error;
+import org.springboot.troubleticketapi.common.RequestIdFilter;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 
 @Component
-public class JsonSecurityErrorHandler {
+class JsonSecurityErrorHandler {
     private final ObjectMapper objectMapper;
 
     public JsonSecurityErrorHandler(ObjectMapper objectMapper) {

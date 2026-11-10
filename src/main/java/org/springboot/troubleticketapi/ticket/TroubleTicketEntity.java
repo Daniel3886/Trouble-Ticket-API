@@ -1,4 +1,4 @@
-package org.springboot.troubleticketapi.entity;
+package org.springboot.troubleticketapi.ticket;
 
 import jakarta.persistence.*;
 import java.util.ArrayList;
@@ -8,7 +8,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.validator.constraints.Length;
-import org.springboot.troubleticketapi.dto.TroubleTicketStatus;
 
 @Table(
         name = "trouble_tickets",
@@ -20,7 +19,7 @@ import org.springboot.troubleticketapi.dto.TroubleTicketStatus;
 @Getter
 @Setter
 @NoArgsConstructor
-public class TroubleTicketEntity {
+class TroubleTicketEntity {
 
     @Id
     @Column(nullable = false, updatable = false)

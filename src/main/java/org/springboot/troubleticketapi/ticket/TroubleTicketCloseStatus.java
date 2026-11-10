@@ -1,9 +1,9 @@
-package org.springboot.troubleticketapi.dto;
+package org.springboot.troubleticketapi.ticket;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 
-public enum TroubleTicketCloseStatus {
+enum TroubleTicketCloseStatus {
     CLOSED("closed");
 
     private final String value;

@@ -1,4 +1,4 @@
-package org.springboot.troubleticketapi.exception;
+package org.springboot.troubleticketapi.ticket;
 
 public class TicketNotFoundException extends RuntimeException {
 
