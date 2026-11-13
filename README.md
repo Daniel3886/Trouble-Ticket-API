@@ -152,19 +152,30 @@ Szczegóły i tabela oczekiwanych odpowiedzi: [`http/README.md`](http/README.md)
 ## Testy
 
 ```bash
-./gradlew test
+./gradlew test   # wymaga uruchomionego Dockera (Testcontainers)
 ```
 
+Testy są podzielone na trzy poziomy:
+
+- **`TroubleTicketApiIntegrationTest`**: test end-to-end. Prawdziwy serwer HTTP na losowym porcie, prawdziwe bezpieczeństwo (token JWT podpisany tym samym sekretem) i PostgreSQL 17 w kontenerze (Testcontainers) z migracjami Flyway i danymi demonstracyjnymi. Obejmuje:
+  - idempotencję tworzenia (`201`, potem `200` z tym samym `id`),
+  - pełny przebieg: utworzenie, dodanie notatki, zamknięcie,
+  - izolację tenantów (zgłoszenie `tenant-a` niewidoczne dla `tenant-b`),
+  - nieaktywną usługę (`404 SERVICE_NOT_FOUND`) i token bez `tenant_id` (`403 MISSING_TENANT`),
+  - wyścig: 8 równoległych żądań z tym samym `externalId` tworzy dokładnie jedno zgłoszenie.
+
+  Test czyta JSON do własnych rekordów zamiast klas produkcyjnych, więc zmiana nazwy pola w odpowiedzi API go zepsuje, tak jak powinna.
+- **`TroubleTicketControllerTest`** (`@WebMvcTest`): warstwa HTTP z zamockowanym serwisem, bez bazy. Sprawdza kody odpowiedzi, nagłówek `Location`, kształt JSON, `401` w formacie `Error` oraz walidację: test parametryzowany (`@ParameterizedTest`) przechodzi przez listę niepoprawnych ciał żądania i dla każdego oczekuje `400 VALIDATION_ERROR` z odpowiednim komunikatem.
 - **`TroubleTicketServiceTest`**: testy jednostkowe serwisu (JUnit 5 + Mockito), bez bazy danych. Repozytorium zgłoszeń, `ServiceCatalog`, `TicketPersistence` i `CurrentTenant` są zamockowane. Obejmują:
   - tworzenie zgłoszenia i przypisanie tenanta z kontekstu uwierzytelnienia,
   - idempotencję: dla istniejącego `(tenantId, externalId)` zwracane jest istniejące zgłoszenie, bez zapisu i bez nadpisania opisu ani notatek,
-  - odrzucenie brakującego statusu przy tworzeniu i zamykaniu,
+  - odrzucenie niedozwolonego statusu (innego niż `new` przy tworzeniu i `closed` przy zamykaniu),
   - walidację usługi (`ServiceNotFoundException`),
   - listowanie i pobieranie zgłoszeń z filtrem tenanta,
   - zamykanie zgłoszenia i błąd dla nieistniejącego zgłoszenia,
   - dodawanie notatki i zwracanie dokładnie dodanej notatki.
 
-`./gradlew test` uruchamia wyłącznie testy jednostkowe, więc nie wymaga bazy danych ani Dockera.
+Nowe testy mają strukturę given/when/then, wspólne dane testowe są w `TicketFixtures`, a sprawdzenia wielu pól naraz używają miękkich asercji (`SoftAssertions`, `andExpectAll`), które raportują wszystkie różnice jednocześnie.
 
 Obraz Dockera buduje wyłącznie plik jar poleceniem `./gradlew bootJar`, które nie uruchamia testów. Testy uruchamia się osobno (`./gradlew test`), dzięki czemu `docker compose up --build` pozostaje szybkie.
 
@@ -258,7 +269,6 @@ Zgodnie ze specyfikacją lista zgłoszeń nie wspiera paginacji ani filtrowania.
 - **Ważność tokenu:** walidator JWT sprawdza `exp` i `nbf` tylko wtedy, gdy są obecne. Token bez `exp` jest akceptowany bezterminowo.
 - **Schemat bazy:** migracje Flyway są uruchamiane przy starcie aplikacji. Przy wielu instancjach lub dużych migracjach lepiej uruchamiać je osobnym krokiem wdrożenia.
 - **Katalog usług:** tabela `services` jest minimalnym substytutem zewnętrznego katalogu. Nie ma endpointu do zarządzania usługami.
-- **Testy:** brak automatycznych testów warstwy HTTP (kody odpowiedzi, `Location`, 401/403, format `Error`) i testów z prawdziwą bazą (unikalny indeks, wyścig przy tworzeniu). Zachowania HTTP sprawdza ręcznie uruchamiana kolekcja `http/`, ale nie są one chronione w `./gradlew test`.
 - **Format błędów spoza kontraktu:** błędy, których kontrakt nie opisuje (`404` dla nieznanej ścieżki, `405`, `500`), zwracają domyślny format Spring Boota, a nie `Error`, i nie zawierają `requestId` w treści (jest tylko w nagłówku `X-Request-ID`).
 - **Konflikty wersji:** równoległa modyfikacja tego samego zgłoszenia (`@Version`) kończy się `500`, kontrakt nie przewiduje `409 Conflict`.
 - **Logowanie:** konfiguracja lokalna loguje wszystkie zapytania SQL (`show-sql`, `org.hibernate.SQL: DEBUG`). Brak metryk i logowania.

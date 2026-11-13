@@ -48,14 +48,17 @@ class TroubleTicketServiceTest {
 
     @Test
     void shouldCreateTicket() {
+        // given
         TroubleTicketCreateRequest request = new TroubleTicketCreateRequest(
                 "OK-123456", 987654321L, "No data connection", TroubleTicketStatus.NEW, "Initial note");
 
         when(troubleTicketRepository.findByTenantIdAndExternalId(TENANT_ID, "OK-123456"))
                 .thenReturn(Optional.empty());
 
+        // when
         var response = troubleTicketService.createTroubleTicket(request);
 
+        // then
         assertEquals("OK-123456", response.ticket().externalId());
         assertEquals(987654321L, response.ticket().serviceId());
         assertEquals("No data connection", response.ticket().description());
@@ -68,18 +71,22 @@ class TroubleTicketServiceTest {
 
     @Test
     void shouldRejectCreateWhenStatusIsNotNew() {
+        // given
         TroubleTicketCreateRequest request = new TroubleTicketCreateRequest(
                 "OK-123456", 987654321L, "No data connection", TroubleTicketStatus.RESOLVED, "Initial note");
 
+        // when
         InvalidStatusException exception =
                 assertThrows(InvalidStatusException.class, () -> troubleTicketService.createTroubleTicket(request));
 
+        // then
         assertEquals("Field 'status' must be 'new'", exception.getMessage());
         verifyNoInteractions(troubleTicketRepository, serviceCatalog, ticketPersistence);
     }
 
     @Test
     void shouldReturnExistingTicketWithoutSavingWhenExternalIdExists() {
+        // given
         TroubleTicketEntity existing = new TroubleTicketEntity(
                 TENANT_ID, "OK-123456", 987654321L, "No data connection", TroubleTicketStatus.IN_PROGRESS);
 
@@ -91,8 +98,10 @@ class TroubleTicketServiceTest {
         TroubleTicketCreateRequest request = new TroubleTicketCreateRequest(
                 "OK-123456", 987654321L, "A different description", TroubleTicketStatus.NEW, "A different note");
 
+        // when
         CreateResult result = troubleTicketService.createTroubleTicket(request);
 
+        // then
         assertFalse(result.created());
         assertEquals(existing.getId(), result.ticket().id());
         assertEquals(TroubleTicketStatus.IN_PROGRESS, result.ticket().status());
@@ -104,13 +113,16 @@ class TroubleTicketServiceTest {
 
     @Test
     void shouldAssignCurrentTenantToNewTicket() {
+        // given
         when(troubleTicketRepository.findByTenantIdAndExternalId(TENANT_ID, "OK-123456"))
                 .thenReturn(Optional.empty());
         TroubleTicketCreateRequest request = new TroubleTicketCreateRequest(
                 "OK-123456", 987654321L, "No data connection", TroubleTicketStatus.NEW, "Initial note");
 
+        // when
         troubleTicketService.createTroubleTicket(request);
 
+        // then
         ArgumentCaptor<TroubleTicketEntity> captor = ArgumentCaptor.forClass(TroubleTicketEntity.class);
         verify(ticketPersistence).persist(captor.capture());
 
@@ -124,6 +136,7 @@ class TroubleTicketServiceTest {
 
     @Test
     void shouldThrowServiceNotFoundExceptionWhenServiceDoesNotExist() {
+        // given
         when(troubleTicketRepository.findByTenantIdAndExternalId(TENANT_ID, "OK-123456"))
                 .thenReturn(Optional.empty());
         doThrow(new ServiceNotFoundException(987654321L))
@@ -133,6 +146,7 @@ class TroubleTicketServiceTest {
         TroubleTicketCreateRequest request = new TroubleTicketCreateRequest(
                 "OK-123456", 987654321L, "No data connection", TroubleTicketStatus.NEW, "Initial note");
 
+        // when / then
         assertThrows(ServiceNotFoundException.class, () -> troubleTicketService.createTroubleTicket(request));
 
         verify(serviceCatalog).requireActiveService(987654321L, TENANT_ID);
@@ -141,7 +155,7 @@ class TroubleTicketServiceTest {
 
     @Test
     void shouldReturnTwoTroubleTicketSummaries() {
-
+        // given
         TroubleTicketEntity ticket1 = new TroubleTicketEntity(
                 TENANT_ID,
                 "8a56c5af-aeb7-4b6b-b493-25f7e74207f0",
@@ -157,8 +171,10 @@ class TroubleTicketServiceTest {
 
         when(troubleTicketRepository.findAllByTenantId(TENANT_ID)).thenReturn(List.of(ticket1, ticket2));
 
+        // when
         List<TroubleTicketSummary> result = troubleTicketService.getTroubleAllTickets();
 
+        // then
         assertEquals(2, result.size());
 
         assertEquals("8a56c5af-aeb7-4b6b-b493-25f7e74207f0", result.getFirst().externalId());
@@ -175,15 +191,19 @@ class TroubleTicketServiceTest {
 
     @Test
     void shouldReturnEmptyList() {
+        // given
         when(troubleTicketRepository.findAllByTenantId(TENANT_ID)).thenReturn(List.of());
 
+        // when
         List<TroubleTicketSummary> result = troubleTicketService.getTroubleAllTickets();
 
+        // then
         assertEquals(0, result.size());
     }
 
     @Test
     void shouldReturnTroubleTicketWithMappedFieldsAndNotes() {
+        // given
         TroubleTicketEntity ticket = new TroubleTicketEntity(
                 TENANT_ID,
                 "f40ef04b-ad43-4dc5-aad8-c7b6a0e021ec",
@@ -194,8 +214,10 @@ class TroubleTicketServiceTest {
 
         when(troubleTicketRepository.findByIdAndTenantId(TICKET_ID, TENANT_ID)).thenReturn(Optional.of(ticket));
 
+        // when
         TroubleTicket result = troubleTicketService.getTroubleTicketById(TICKET_ID);
 
+        // then
         assertEquals("f40ef04b-ad43-4dc5-aad8-c7b6a0e021ec", result.externalId());
         assertEquals(322, result.serviceId());
         assertEquals("new summary for the ticket", result.description());
@@ -207,17 +229,21 @@ class TroubleTicketServiceTest {
 
     @Test
     void shouldThrowTicketNotFoundExceptionWhenTicketNotFoundById() {
+        // given
         when(troubleTicketRepository.findByIdAndTenantId(TICKET_ID, TENANT_ID)).thenReturn(Optional.empty());
 
+        // when
         TicketNotFoundException exception =
                 assertThrows(TicketNotFoundException.class, () -> troubleTicketService.getTroubleTicketById(TICKET_ID));
 
+        // then
         assertTrue(exception.getMessage().contains(TICKET_ID));
         verify(troubleTicketRepository, never()).save(any(TroubleTicketEntity.class));
     }
 
     @Test
     void shouldCloseTroubleTicket() {
+        // given
         TroubleTicketEntity ticket = new TroubleTicketEntity(
                 TENANT_ID,
                 "f40ef04b-ad43-4dc5-aad8-c7b6a0e021ec",
@@ -230,8 +256,10 @@ class TroubleTicketServiceTest {
 
         TroubleTicketCloseStatusRequest request = new TroubleTicketCloseStatusRequest(TroubleTicketStatus.CLOSED);
 
+        // when
         TroubleTicket result = troubleTicketService.closeTroubleTicket(TICKET_ID, request);
 
+        // then
         assertEquals(TroubleTicketStatus.CLOSED, result.status());
         assertEquals("f40ef04b-ad43-4dc5-aad8-c7b6a0e021ec", result.externalId());
         assertEquals(322, result.serviceId());
@@ -241,21 +269,26 @@ class TroubleTicketServiceTest {
 
     @Test
     void shouldRejectCloseWhenStatusIsNotClosed() {
+        // given
         TroubleTicketCloseStatusRequest request = new TroubleTicketCloseStatusRequest(TroubleTicketStatus.RESOLVED);
 
+        // when
         InvalidStatusException exception = assertThrows(
                 InvalidStatusException.class, () -> troubleTicketService.closeTroubleTicket(TICKET_ID, request));
 
+        // then
         assertEquals("Field 'status' must be 'closed'", exception.getMessage());
         verifyNoInteractions(troubleTicketRepository);
     }
 
     @Test
     void shouldThrowTicketNotFoundWhenClosingMissingTicket() {
+        // given
         when(troubleTicketRepository.findByIdAndTenantId(TICKET_ID, TENANT_ID)).thenReturn(Optional.empty());
 
         TroubleTicketCloseStatusRequest request = new TroubleTicketCloseStatusRequest(TroubleTicketStatus.CLOSED);
 
+        // when / then
         assertThrows(TicketNotFoundException.class, () -> troubleTicketService.closeTroubleTicket(TICKET_ID, request));
 
         verify(troubleTicketRepository, never()).save(any());
@@ -263,6 +296,7 @@ class TroubleTicketServiceTest {
 
     @Test
     void shouldReturnAddedNoteWhenAddingNoteToTicket() {
+        // given
         TroubleTicketEntity ticket = new TroubleTicketEntity(
                 TENANT_ID,
                 "f40ef04b-ad43-4dc5-aad8-c7b6a0e021ec",
@@ -273,8 +307,11 @@ class TroubleTicketServiceTest {
         String firstNoteId = ticket.getNotes().getFirst().getId();
 
         when(troubleTicketRepository.findByIdAndTenantId(TICKET_ID, TENANT_ID)).thenReturn(Optional.of(ticket));
+
+        // when
         Note result = troubleTicketService.addTroubleTicketNote(TICKET_ID, new NoteCreateRequest("second Note"));
 
+        // then
         assertEquals("second Note", result.text());
         assertNotNull(result.id());
         assertNotEquals(firstNoteId, result.id());
@@ -288,10 +325,12 @@ class TroubleTicketServiceTest {
 
     @Test
     void shouldThrowTicketNotFoundExceptionWhenAddingNoteToTroubleTicket() {
+        // given
         when(troubleTicketRepository.findByIdAndTenantId(TICKET_ID, TENANT_ID)).thenReturn(Optional.empty());
 
         NoteCreateRequest request = new NoteCreateRequest("new note for the ticket");
 
+        // when / then
         assertThrows(
                 TicketNotFoundException.class, () -> troubleTicketService.addTroubleTicketNote(TICKET_ID, request));
 
