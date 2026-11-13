@@ -1,6 +1,7 @@
 package org.springboot.troubleticketapi.ticket;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
@@ -8,6 +9,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -24,15 +26,12 @@ import org.springboot.troubleticketapi.security.SecurityTestConfig;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
-/**
- * HTTP layer only: routing, status codes, headers, JSON shape, validation, security and the error format. The service
- * is mocked, so no database is needed.
- */
 @WebMvcTest(TroubleTicketController.class)
 @Import(SecurityTestConfig.class)
 class TroubleTicketControllerTest {
@@ -170,6 +169,53 @@ class TroubleTicketControllerTest {
                         jsonPath("$.requestId", notNullValue()));
 
         verifyNoInteractions(troubleTicketService);
+    }
+
+    @Test
+    void unexpectedExceptionReturnsGeneric500WithoutInternalDetails() throws Exception {
+        // given: an exception whose message must never reach the client
+        given(troubleTicketService.getTroubleTicketById("any"))
+                .willThrow(new IllegalArgumentException("SQL: select * from trouble_tickets where secret=42"));
+
+        // when / then
+        mockMvc.perform(get(URL + "/any").with(tenantA()))
+                .andExpectAll(
+                        status().isInternalServerError(),
+                        jsonPath("$.code").value("INTERNAL_ERROR"),
+                        jsonPath("$.message", not(containsString("secret"))),
+                        jsonPath("$.requestId", notNullValue()));
+    }
+
+    @Test
+    void concurrentModificationReturns409() throws Exception {
+        // given
+        given(troubleTicketService.closeTroubleTicket(eq(TicketFixtures.TICKET_ID), any()))
+                .willThrow(new OptimisticLockingFailureException("Row was updated by another transaction"));
+
+        // when / then
+        mockMvc.perform(patch(URL + "/" + TicketFixtures.TICKET_ID)
+                        .with(tenantA())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"closed\"}"))
+                .andExpectAll(status().isConflict(), jsonPath("$.code").value("CONFLICT"));
+    }
+
+    @Test
+    void unsupportedHttpMethodReturns405InErrorFormat() throws Exception {
+        mockMvc.perform(delete(URL + "/" + TicketFixtures.TICKET_ID).with(tenantA()))
+                .andExpectAll(
+                        status().isMethodNotAllowed(),
+                        jsonPath("$.code").value("METHOD_NOT_ALLOWED"),
+                        jsonPath("$.requestId", notNullValue()));
+    }
+
+    @Test
+    void unknownPathReturns404InErrorFormat() throws Exception {
+        mockMvc.perform(get("/api/v1/unknown").with(tenantA()))
+                .andExpectAll(
+                        status().isNotFound(),
+                        jsonPath("$.code").value("NOT_FOUND"),
+                        jsonPath("$.requestId", notNullValue()));
     }
 
     private static RequestPostProcessor tenantA() {

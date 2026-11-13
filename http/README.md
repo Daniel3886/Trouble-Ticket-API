@@ -98,6 +98,6 @@ Demo services from `db/seed`: `987654321` tenant-a active, `987654323` tenant-a 
 
 Every error body has the `Error` shape: `code`, `message`, `requestId`.
 
-Outside the contract (not in the file): a wrong HTTP method (e.g. `DELETE`) returns `405` in
-Spring Boot's default error format, not `Error`; an unknown path with a valid token returns
-`403 FORBIDDEN`.
+Outside the contract (not in the file): a wrong HTTP method (e.g. `DELETE`) returns
+`405 METHOD_NOT_ALLOWED`, an unknown path under `/api/v1` with a valid token returns `404 NOT_FOUND`,
+and any other path returns `403 FORBIDDEN`. All of them use the `Error` shape.

@@ -33,7 +33,7 @@ src/main/java/org/springboot/troubleticketapi/
 │                     # (requireActiveService) i ServiceNotFoundException; encja i repozytorium są ukryte.
 ├── security/         # Konfiguracja JWT, CurrentTenant (tenant z claimu tenant_id), błędy 401/403 w formacie Error
 └── common/           # Elementy wspólne dla wszystkich funkcjonalności: GlobalExceptionHandler,
-                      # rekord Error, RequestIdFilter (nagłówek X-Request-ID)
+                      # rekord Error, enum ErrorCode, RequestIdFilter (nagłówek X-Request-ID)
 
 src/main/resources/
 ├── application.yaml
@@ -173,7 +173,7 @@ Testy są podzielone na trzy poziomy:
   - wyścig: 8 równoległych żądań z tym samym `externalId` tworzy dokładnie jedno zgłoszenie.
 
   Test czyta JSON do własnych rekordów zamiast klas produkcyjnych, więc zmiana nazwy pola w odpowiedzi API go zepsuje, tak jak powinna.
-- **`TroubleTicketControllerTest`** (`@WebMvcTest`): warstwa HTTP z zamockowanym serwisem, bez bazy. Sprawdza kody odpowiedzi, nagłówek `Location`, kształt JSON, `401` w formacie `Error` oraz walidację: test parametryzowany (`@ParameterizedTest`) przechodzi przez listę niepoprawnych ciał żądania i dla każdego oczekuje `400 VALIDATION_ERROR` z odpowiednim komunikatem.
+- **`TroubleTicketControllerTest`** (`@WebMvcTest`): warstwa HTTP z zamockowanym serwisem, bez bazy. Sprawdza kody odpowiedzi, nagłówek `Location`, kształt JSON, `401` w formacie `Error`, obsługę błędów (`404`/`405` w formacie `Error`, `409` przy konflikcie wersji, `500` bez treści wewnętrznego wyjątku) oraz walidację: test parametryzowany (`@ParameterizedTest`) przechodzi przez listę niepoprawnych ciał żądania i dla każdego oczekuje `400 VALIDATION_ERROR` z odpowiednim komunikatem.
 - **`TroubleTicketServiceTest`**: testy jednostkowe serwisu (JUnit 5 + Mockito), bez bazy danych. Repozytorium zgłoszeń, `ServiceCatalog` i `CurrentTenant` są zamockowane. Obejmują:
   - tworzenie zgłoszenia i przypisanie tenanta z kontekstu uwierzytelnienia,
   - idempotencję: dla istniejącego `(tenantId, externalId)` zwracane jest istniejące zgłoszenie, bez zapisu i bez nadpisania opisu ani notatek,
@@ -248,16 +248,23 @@ Błędy obsługiwane przez aplikację mają format `Error` (`code`, `message`, `
 | Poprawny token, ale ścieżka spoza `/api/v1` i dokumentacji        | 403    | `FORBIDDEN`                |
 | Zgłoszenie nie istnieje lub należy do innego tenanta              | 404    | `TROUBLE_TICKET_NOT_FOUND` |
 | Usługa nie istnieje, jest nieaktywna lub należy do innego tenanta | 404    | `SERVICE_NOT_FOUND`        |
+| Nieznana ścieżka w `/api/v1` (z poprawnym tokenem)                | 404    | `NOT_FOUND`                |
+| Niedozwolona metoda HTTP (np. `DELETE`)                           | 405    | `METHOD_NOT_ALLOWED`       |
+| Równoległa modyfikacja tego samego zgłoszenia (`@Version`)        | 409    | `CONFLICT`                 |
+| Nagłówek `Content-Type` inny niż JSON                             | 415    | `UNSUPPORTED_MEDIA_TYPE`   |
+| Nieoczekiwany błąd                                                | 500    | `INTERNAL_ERROR`           |
 
-Kontrakt definiuje kody `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `SERVICE_NOT_FOUND` i `TROUBLE_TICKET_NOT_FOUND`. Kod `MISSING_TENANT` nie występuje w kontrakcie (najbliższy odpowiednik to `FORBIDDEN`).
+Wszystkie kody, ich status HTTP i domyślny komunikat są zdefiniowane w jednym miejscu, w enumie `ErrorCode`, którego używają zarówno `GlobalExceptionHandler`, jak i obsługa błędów 401/403 (`JsonSecurityErrorHandler`). Kontrakt definiuje kody `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `SERVICE_NOT_FOUND` i `TROUBLE_TICKET_NOT_FOUND`. Pozostałe opisują sytuacje, których kontrakt nie obejmuje. `MISSING_TENANT` jest bliższym odpowiednikiem `FORBIDDEN`, a reszta zastępuje domyślny format Spring Boota, żeby każda odpowiedź błędu miała kształt `Error` i `requestId`.
 
 Ciało żądania, którego nie da się odczytać (`HttpMessageNotReadableException`: nieznana wartość statusu, nieznane pole, zły typ, błędny JSON), zwraca `400 VALIDATION_ERROR`. Komunikat wskazuje wyłącznie nazwę pola (np. `Field 'status' has an invalid value`), a nie oryginalny komunikat Jacksona, który ujawniałby nazwy klas.
 
 Niedozwolony status zgłasza serwis wyjątkiem `InvalidStatusException`, który `GlobalExceptionHandler` mapuje na `400 VALIDATION_ERROR`, tak samo jak pozostałe błędy walidacji.
 
-`GlobalExceptionHandler` nadal zawiera obsługę `IllegalArgumentException` (`400 ILLEGAL_ARGUMENT`). Kod aplikacji już go nie rzuca, a handler zwraca komunikat wyjątku klientowi (patrz "Znane ograniczenia").
+Klient dostaje treść komunikatu wyjątku tylko dla wyjątków aplikacji (`TicketNotFoundException`, `ServiceNotFoundException`, `InvalidStatusException`, `MissingTenantException`). Ich komunikaty powtarzają jedynie to, co przysłał klient (np. `id`), więc niczego nie ujawniają. Wszystkie inne wyjątki dostają stały komunikat z `ErrorCode`:
+- Błędy samego Springa MVC (nieznana ścieżka, niedozwolona metoda, zły `Content-Type`) zachowują swój kod HTTP (`404`, `405`, `415`).
+- Każdy inny wyjątek to błąd programu: jego szczegóły (komunikat i stack trace) trafiają do logu razem z `requestId`, a klient dostaje `500 INTERNAL_ERROR` z ogólnym komunikatem i tym samym `requestId`, który może podać przy zgłaszaniu problemu. Komunikat wyjątku może pochodzić z biblioteki (np. fragment SQL), więc nigdy nie jest zwracany klientowi.
 
-Pozostałe błędy (nieznana ścieżka, niedozwolona metoda HTTP, nieoczekiwany błąd serwera) nie są obsługiwane osobno i zwracają domyślną odpowiedź Spring Boota z odpowiednim kodem HTTP.
+Wcześniejsza wersja zwracała komunikat każdego `IllegalArgumentException` jako `400 ILLEGAL_ARGUMENT`, a pozostałe błędy w domyślnym formacie Spring Boota.
 
 Błędy 401 i 403 powstają w łańcuchu filtrów Spring Security, przed kontrolerem, dlatego obsługują je `AuthenticationEntryPoint` i `AccessDeniedHandler` (`JsonSecurityErrorHandler`), a nie `@RestControllerAdvice`. Wyjątkiem jest `MISSING_TENANT`: brak `tenant_id` wykrywa dopiero `CurrentTenant` w serwisie, a `403` zwraca `GlobalExceptionHandler`.
 
@@ -284,7 +291,7 @@ Przy równoległym tworzeniu tego samego `(tenantId, externalId)` oba żądania 
 
 Zachowanie sprawdza test integracyjny, który wysyła 8 równoległych żądań z tym samym `externalId` i oczekuje dokładnie jednego `201`.
 
-Encja zgłoszenia ma pole `@Version` (blokowanie optymistyczne), które chroni przed nadpisaniem zmian przez równoległe transakcje. API nie udostępnia wersji klientowi (brak `ETag` / `If-Match`), a konflikt nie jest mapowany na `409`.
+Encja zgłoszenia ma pole `@Version` (blokowanie optymistyczne), które chroni przed nadpisaniem zmian przez równoległe transakcje. Konflikt (`OptimisticLockingFailureException`) zwraca `409 CONFLICT`, a klient może ponowić żądanie. API nie udostępnia wersji klientowi (brak `ETag` / `If-Match`), więc chroni tylko przed równoległym zapisem, nie przed nadpisaniem zmian, które klient wcześniej odczytał.
 
 ### Uwierzytelnianie
 Tokeny są weryfikowane współdzielonym sekretem HS256. To uproszczenie na potrzeby zadania.
@@ -297,8 +304,6 @@ Zgodnie ze specyfikacją lista zgłoszeń nie wspiera paginacji ani filtrowania.
 - **Ważność tokenu:** walidator JWT sprawdza `exp` i `nbf` tylko wtedy, gdy są obecne. Token bez `exp` jest akceptowany bezterminowo.
 - **Schemat bazy:** migracje Flyway są uruchamiane przy starcie aplikacji. Przy wielu instancjach lub dużych migracjach lepiej uruchamiać je osobnym krokiem wdrożenia.
 - **Katalog usług:** tabela `services` jest minimalnym substytutem zewnętrznego katalogu. Nie ma endpointu do zarządzania usługami.
-- **Komunikaty wyjątków:** handler `IllegalArgumentException` zwraca klientowi treść komunikatu wyjątku, która może pochodzić z biblioteki i zawierać szczegóły wewnętrzne. Nieoczekiwane wyjątki nie mają osobnego handlera, który zalogowałby szczegóły i zwrócił ogólny komunikat z `requestId`.
-- **Format błędów spoza kontraktu:** błędy, których kontrakt nie opisuje (`404` dla nieznanej ścieżki, `405`, `500`), zwracają domyślny format Spring Boota, a nie `Error`, i nie zawierają `requestId` w treści (jest tylko w nagłówku `X-Request-ID`).
-- **Konflikty wersji:** równoległa modyfikacja tego samego zgłoszenia (`@Version`) kończy się `500`, kontrakt nie przewiduje `409 Conflict`.
+- **Kody spoza kontraktu:** `NOT_FOUND`, `METHOD_NOT_ALLOWED`, `CONFLICT`, `UNSUPPORTED_MEDIA_TYPE` i `INTERNAL_ERROR` nie występują w kontrakcie. Klient napisany ściśle według specyfikacji może ich nie rozpoznawać.
 - **Konfiguracja:** `application.yaml` ma domyślne wartości `JWT_SECRET` i `POSTGRES_PASSWORD` przeznaczone do lokalnego uruchomienia. Wdrożenie musi je nadpisać zmiennymi środowiskowymi.
 - **Obserwowalność:** konfiguracja loguje wszystkie zapytania SQL (`show-sql`, `org.hibernate.SQL: DEBUG`). Brak metryk, endpointów health (liveness/readiness) i `requestId` w logach (MDC).

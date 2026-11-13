@@ -1,10 +1,10 @@
 package org.springboot.troubleticketapi.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.servlet.http.HttpServletResponse;
 import java.nio.charset.StandardCharsets;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
+import org.springboot.troubleticketapi.common.ErrorCode;
 import org.springboot.troubleticketapi.common.RequestIdFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -41,23 +41,13 @@ class SecurityConfig {
                         .authenticated()
                         .anyRequest()
                         .denyAll())
-                .exceptionHandling(errors -> errors.authenticationEntryPoint(
-                                ((request, response, authException) -> errorHandler.write(
-                                        request,
-                                        response,
-                                        HttpServletResponse.SC_UNAUTHORIZED,
-                                        "UNAUTHORIZED",
-                                        "Missing or invalid Bearer token")))
-                        .accessDeniedHandler((request, response, exception) -> errorHandler.write(
-                                request, response, HttpServletResponse.SC_FORBIDDEN, "FORBIDDEN", "Access is denied")))
-                .oauth2ResourceServer(
-                        oauth2 -> oauth2.authenticationEntryPoint((request, response, exception) -> errorHandler.write(
-                                        request,
-                                        response,
-                                        HttpServletResponse.SC_UNAUTHORIZED,
-                                        "UNAUTHORIZED",
-                                        "Missing or invalid Bearer token"))
-                                .jwt(jwt -> {}));
+                .exceptionHandling(errors -> errors.authenticationEntryPoint(((request, response, authException) ->
+                                errorHandler.write(request, response, ErrorCode.UNAUTHORIZED)))
+                        .accessDeniedHandler((request, response, exception) ->
+                                errorHandler.write(request, response, ErrorCode.FORBIDDEN)))
+                .oauth2ResourceServer(oauth2 -> oauth2.authenticationEntryPoint((request, response, exception) ->
+                                errorHandler.write(request, response, ErrorCode.UNAUTHORIZED))
+                        .jwt(jwt -> {}));
 
         http.addFilterBefore(requestIdFilter, BearerTokenAuthenticationFilter.class);
 
