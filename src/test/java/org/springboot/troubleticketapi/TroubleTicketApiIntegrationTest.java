@@ -222,7 +222,13 @@ class TroubleTicketApiIntegrationTest {
 
     private static String createJson(String externalId, long serviceId) {
         return """
-                {"externalId":"%s","serviceId":%d,"description":"Router down","status":"new","note":"Initial note"}
+                {
+                "externalId":"%s",
+                "serviceId":%d,
+                "description":"Router down",
+                "status":"new",
+                "note":"Initial note"
+                }
                 """.formatted(externalId, serviceId);
     }
 

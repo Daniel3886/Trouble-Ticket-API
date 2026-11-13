@@ -13,21 +13,17 @@ class TroubleTicketService {
 
     private final TroubleTicketRepository troubleTicketRepository;
     private final ServiceCatalog serviceCatalog;
-    private final TicketPersistence ticketPersistence;
     private final CurrentTenant currentTenant;
 
     public TroubleTicketService(
             TroubleTicketRepository troubleTicketRepository,
             ServiceCatalog serviceCatalog,
-            TicketPersistence ticketPersistence,
             CurrentTenant currentTenant) {
         this.troubleTicketRepository = troubleTicketRepository;
         this.serviceCatalog = serviceCatalog;
-        this.ticketPersistence = ticketPersistence;
         this.currentTenant = currentTenant;
     }
 
-    @Transactional
     public CreateResult createTroubleTicket(TroubleTicketCreateRequest request) {
         String tenantId = currentTenant.getTenantId();
 
@@ -49,7 +45,7 @@ class TroubleTicketService {
         troubleTicket.addNote(request.note());
 
         try {
-            ticketPersistence.persist(troubleTicket);
+            troubleTicketRepository.saveAndFlush(troubleTicket);
             return new CreateResult(toTroubleTicket(troubleTicket), true);
         } catch (DataIntegrityViolationException duplicateExternalId) {
             TroubleTicketEntity concurrentTicket = troubleTicketRepository

@@ -16,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springboot.troubleticketapi.security.CurrentTenant;
 import org.springboot.troubleticketapi.servicecatalog.ServiceCatalog;
 import org.springboot.troubleticketapi.servicecatalog.ServiceNotFoundException;
+import org.springframework.dao.DataIntegrityViolationException;
 
 @ExtendWith(MockitoExtension.class)
 class TroubleTicketServiceTest {
@@ -25,9 +26,6 @@ class TroubleTicketServiceTest {
 
     @Mock
     ServiceCatalog serviceCatalog;
-
-    @Mock
-    TicketPersistence ticketPersistence;
 
     @Mock
     CurrentTenant tenant;
@@ -42,7 +40,7 @@ class TroubleTicketServiceTest {
     void setUp() {
         when(tenant.getTenantId()).thenReturn(TENANT_ID);
         lenient()
-                .when(ticketPersistence.persist(any(TroubleTicketEntity.class)))
+                .when(troubleTicketRepository.saveAndFlush(any(TroubleTicketEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
     }
 
@@ -66,7 +64,7 @@ class TroubleTicketServiceTest {
         assertEquals("Initial note", response.ticket().notes().getFirst().text());
         assertTrue(response.created());
 
-        verify(ticketPersistence).persist(any(TroubleTicketEntity.class));
+        verify(troubleTicketRepository).saveAndFlush(any(TroubleTicketEntity.class));
     }
 
     @Test
@@ -81,7 +79,7 @@ class TroubleTicketServiceTest {
 
         // then
         assertEquals("Field 'status' must be 'new'", exception.getMessage());
-        verifyNoInteractions(troubleTicketRepository, serviceCatalog, ticketPersistence);
+        verifyNoInteractions(troubleTicketRepository, serviceCatalog);
     }
 
     @Test
@@ -112,6 +110,32 @@ class TroubleTicketServiceTest {
     }
 
     @Test
+    void shouldReturnConcurrentlyCreatedTicketWhenInsertHitsUniqueConstraint() {
+        // given: the first lookup finds nothing, but another request inserts the same externalId before us
+        TroubleTicketEntity winner = new TroubleTicketEntity(
+                TENANT_ID, "OK-123456", 987654321L, "Created by the other request", TroubleTicketStatus.NEW);
+        winner.addNote("Other note");
+
+        when(troubleTicketRepository.findByTenantIdAndExternalId(TENANT_ID, "OK-123456"))
+                .thenReturn(Optional.empty(), Optional.of(winner));
+
+        when(troubleTicketRepository.saveAndFlush(any(TroubleTicketEntity.class)))
+                .thenThrow(new DataIntegrityViolationException("unique_tenant_external_id"));
+
+        TroubleTicketCreateRequest request = new TroubleTicketCreateRequest(
+                "OK-123456", 987654321L, "No data connection", TroubleTicketStatus.NEW, "Initial note");
+
+        // when
+        CreateResult result = troubleTicketService.createTroubleTicket(request);
+
+        // then
+        assertFalse(result.created());
+        assertEquals(winner.getId(), result.ticket().id());
+        assertEquals("Created by the other request", result.ticket().description());
+        verify(troubleTicketRepository, times(2)).findByTenantIdAndExternalId(TENANT_ID, "OK-123456");
+    }
+
+    @Test
     void shouldAssignCurrentTenantToNewTicket() {
         // given
         when(troubleTicketRepository.findByTenantIdAndExternalId(TENANT_ID, "OK-123456"))
@@ -124,7 +148,7 @@ class TroubleTicketServiceTest {
 
         // then
         ArgumentCaptor<TroubleTicketEntity> captor = ArgumentCaptor.forClass(TroubleTicketEntity.class);
-        verify(ticketPersistence).persist(captor.capture());
+        verify(troubleTicketRepository).saveAndFlush(captor.capture());
 
         TroubleTicketEntity saved = captor.getValue();
         assertEquals(TENANT_ID, saved.getTenantId());

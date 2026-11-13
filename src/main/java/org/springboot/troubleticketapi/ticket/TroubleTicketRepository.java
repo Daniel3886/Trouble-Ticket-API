@@ -2,12 +2,14 @@ package org.springboot.troubleticketapi.ticket;
 
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 @Repository
 interface TroubleTicketRepository extends JpaRepository<TroubleTicketEntity, String> {
 
+    @EntityGraph(attributePaths = "notes")
     Optional<TroubleTicketEntity> findByTenantIdAndExternalId(String tenantId, String externalId);
 
     List<TroubleTicketEntity> findAllByTenantId(String tenantId);
