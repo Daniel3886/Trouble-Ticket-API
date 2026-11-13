@@ -38,7 +38,7 @@ class TroubleTicketServiceTest {
 
     @BeforeEach
     void setUp() {
-        when(tenant.getTenantId()).thenReturn(TENANT_ID);
+        lenient().when(tenant.getTenantId()).thenReturn(TENANT_ID);
         lenient()
                 .when(troubleTicketRepository.saveAndFlush(any(TroubleTicketEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -85,10 +85,10 @@ class TroubleTicketServiceTest {
     @Test
     void shouldReturnExistingTicketWithoutSavingWhenExternalIdExists() {
         // given
-        TroubleTicketEntity existing = new TroubleTicketEntity(
-                TENANT_ID, "OK-123456", 987654321L, "No data connection", TroubleTicketStatus.IN_PROGRESS);
-
+        TroubleTicketEntity existing =
+                new TroubleTicketEntity(TENANT_ID, "OK-123456", 987654321L, "No data connection");
         existing.addNote("Initial note");
+        existing.close();
 
         when(troubleTicketRepository.findByTenantIdAndExternalId(TENANT_ID, "OK-123456"))
                 .thenReturn(Optional.of(existing));
@@ -102,7 +102,7 @@ class TroubleTicketServiceTest {
         // then
         assertFalse(result.created());
         assertEquals(existing.getId(), result.ticket().id());
-        assertEquals(TroubleTicketStatus.IN_PROGRESS, result.ticket().status());
+        assertEquals(TroubleTicketStatus.CLOSED, result.ticket().status());
         assertEquals("No data connection", result.ticket().description());
         assertEquals(1, result.ticket().notes().size());
 
@@ -112,8 +112,8 @@ class TroubleTicketServiceTest {
     @Test
     void shouldReturnConcurrentlyCreatedTicketWhenInsertHitsUniqueConstraint() {
         // given: the first lookup finds nothing, but another request inserts the same externalId before us
-        TroubleTicketEntity winner = new TroubleTicketEntity(
-                TENANT_ID, "OK-123456", 987654321L, "Created by the other request", TroubleTicketStatus.NEW);
+        TroubleTicketEntity winner =
+                new TroubleTicketEntity(TENANT_ID, "OK-123456", 987654321L, "Created by the other request");
         winner.addNote("Other note");
 
         when(troubleTicketRepository.findByTenantIdAndExternalId(TENANT_ID, "OK-123456"))
@@ -181,22 +181,16 @@ class TroubleTicketServiceTest {
     void shouldReturnTwoTroubleTicketSummaries() {
         // given
         TroubleTicketEntity ticket1 = new TroubleTicketEntity(
-                TENANT_ID,
-                "8a56c5af-aeb7-4b6b-b493-25f7e74207f0",
-                322,
-                "new summary for the ticket",
-                TroubleTicketStatus.NEW);
+                TENANT_ID, "8a56c5af-aeb7-4b6b-b493-25f7e74207f0", 322, "new summary for the ticket");
 
-        TroubleTicketEntity ticket2 = new TroubleTicketEntity();
-        ticket2.setExternalId("52dc8009-5bb6-4637-89b5-caf213238313");
-        ticket2.setServiceId(828);
-        ticket2.setDescription("acknowledged summary for the ticket");
-        ticket2.setStatus(TroubleTicketStatus.ACKNOWLEDGED);
+        TroubleTicketEntity ticket2 = new TroubleTicketEntity(
+                TENANT_ID, "52dc8009-5bb6-4637-89b5-caf213238313", 828, "closed summary for the ticket");
+        ticket2.close();
 
         when(troubleTicketRepository.findAllByTenantId(TENANT_ID)).thenReturn(List.of(ticket1, ticket2));
 
         // when
-        List<TroubleTicketSummary> result = troubleTicketService.getTroubleAllTickets();
+        List<TroubleTicketSummary> result = troubleTicketService.getAllTroubleTickets();
 
         // then
         assertEquals(2, result.size());
@@ -208,8 +202,8 @@ class TroubleTicketServiceTest {
 
         assertEquals("52dc8009-5bb6-4637-89b5-caf213238313", result.get(1).externalId());
         assertEquals(828, result.get(1).serviceId());
-        assertEquals("acknowledged summary for the ticket", result.get(1).description());
-        assertEquals(TroubleTicketStatus.ACKNOWLEDGED, result.get(1).status());
+        assertEquals("closed summary for the ticket", result.get(1).description());
+        assertEquals(TroubleTicketStatus.CLOSED, result.get(1).status());
         verify(troubleTicketRepository).findAllByTenantId(TENANT_ID);
     }
 
@@ -219,7 +213,7 @@ class TroubleTicketServiceTest {
         when(troubleTicketRepository.findAllByTenantId(TENANT_ID)).thenReturn(List.of());
 
         // when
-        List<TroubleTicketSummary> result = troubleTicketService.getTroubleAllTickets();
+        List<TroubleTicketSummary> result = troubleTicketService.getAllTroubleTickets();
 
         // then
         assertEquals(0, result.size());
@@ -229,11 +223,7 @@ class TroubleTicketServiceTest {
     void shouldReturnTroubleTicketWithMappedFieldsAndNotes() {
         // given
         TroubleTicketEntity ticket = new TroubleTicketEntity(
-                TENANT_ID,
-                "f40ef04b-ad43-4dc5-aad8-c7b6a0e021ec",
-                322,
-                "new summary for the ticket",
-                TroubleTicketStatus.NEW);
+                TENANT_ID, "f40ef04b-ad43-4dc5-aad8-c7b6a0e021ec", 322, "new summary for the ticket");
         ticket.addNote("first note");
 
         when(troubleTicketRepository.findByIdAndTenantId(TICKET_ID, TENANT_ID)).thenReturn(Optional.of(ticket));
@@ -269,11 +259,7 @@ class TroubleTicketServiceTest {
     void shouldCloseTroubleTicket() {
         // given
         TroubleTicketEntity ticket = new TroubleTicketEntity(
-                TENANT_ID,
-                "f40ef04b-ad43-4dc5-aad8-c7b6a0e021ec",
-                322,
-                "new summary for the ticket",
-                TroubleTicketStatus.IN_PROGRESS);
+                TENANT_ID, "f40ef04b-ad43-4dc5-aad8-c7b6a0e021ec", 322, "new summary for the ticket");
 
         when(troubleTicketRepository.findByIdAndTenantId(TICKET_ID, TENANT_ID)).thenReturn(Optional.of(ticket));
         when(troubleTicketRepository.save(any(TroubleTicketEntity.class))).thenReturn(ticket);
@@ -322,11 +308,7 @@ class TroubleTicketServiceTest {
     void shouldReturnAddedNoteWhenAddingNoteToTicket() {
         // given
         TroubleTicketEntity ticket = new TroubleTicketEntity(
-                TENANT_ID,
-                "f40ef04b-ad43-4dc5-aad8-c7b6a0e021ec",
-                322,
-                "new summary for the ticket",
-                TroubleTicketStatus.NEW);
+                TENANT_ID, "f40ef04b-ad43-4dc5-aad8-c7b6a0e021ec", 322, "new summary for the ticket");
         ticket.addNote("first note");
         String firstNoteId = ticket.getNotes().getFirst().getId();
 

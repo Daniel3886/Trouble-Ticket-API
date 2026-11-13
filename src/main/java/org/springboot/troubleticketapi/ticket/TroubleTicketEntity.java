@@ -4,9 +4,9 @@ import jakarta.persistence.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 import org.hibernate.validator.constraints.Length;
 
 @Table(
@@ -17,8 +17,7 @@ import org.hibernate.validator.constraints.Length;
                         columnNames = {"tenant_id", "external_id"}))
 @Entity
 @Getter
-@Setter
-@NoArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 class TroubleTicketEntity {
 
     @Id
@@ -49,14 +48,13 @@ class TroubleTicketEntity {
     @Version
     private Long version;
 
-    public TroubleTicketEntity(
-            String tenantId, String externalId, long serviceId, String description, TroubleTicketStatus status) {
+    public TroubleTicketEntity(String tenantId, String externalId, long serviceId, String description) {
         this.id = UUID.randomUUID().toString();
         this.tenantId = tenantId;
         this.externalId = externalId;
         this.serviceId = serviceId;
         this.description = description;
-        this.status = status;
+        this.status = TroubleTicketStatus.NEW;
     }
 
     public NoteEntity addNote(String text) {

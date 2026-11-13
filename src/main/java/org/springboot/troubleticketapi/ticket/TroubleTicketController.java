@@ -32,8 +32,8 @@ class TroubleTicketController {
     }
 
     @GetMapping
-    public List<TroubleTicketSummary> getTroubleAllTickets() {
-        return troubleTicketService.getTroubleAllTickets();
+    public List<TroubleTicketSummary> getAllTroubleTickets() {
+        return troubleTicketService.getAllTroubleTickets();
     }
 
     @GetMapping("/{id}")

@@ -39,8 +39,8 @@ class TroubleTicketService {
 
         serviceCatalog.requireActiveService(request.serviceId(), tenantId);
 
-        TroubleTicketEntity troubleTicket = new TroubleTicketEntity(
-                tenantId, request.externalId(), request.serviceId(), request.description(), TroubleTicketStatus.NEW);
+        TroubleTicketEntity troubleTicket =
+                new TroubleTicketEntity(tenantId, request.externalId(), request.serviceId(), request.description());
 
         troubleTicket.addNote(request.note());
 
@@ -55,7 +55,8 @@ class TroubleTicketService {
         }
     }
 
-    public List<TroubleTicketSummary> getTroubleAllTickets() {
+    @Transactional(readOnly = true)
+    public List<TroubleTicketSummary> getAllTroubleTickets() {
         String tenantId = currentTenant.getTenantId();
 
         return troubleTicketRepository.findAllByTenantId(tenantId).stream()
@@ -66,42 +67,33 @@ class TroubleTicketService {
 
     @Transactional(readOnly = true)
     public TroubleTicket getTroubleTicketById(String id) {
-        String tenantId = currentTenant.getTenantId();
-
-        TroubleTicketEntity ticket = troubleTicketRepository
-                .findByIdAndTenantId(id, tenantId)
-                .orElseThrow(() -> new TicketNotFoundException("Ticket not found with id: " + id));
-        return toTroubleTicket(ticket);
+        return toTroubleTicket(findTicket(id));
     }
 
     @Transactional
     public TroubleTicket closeTroubleTicket(String id, TroubleTicketCloseStatusRequest request) {
-        String tenantId = currentTenant.getTenantId();
-
         if (request.status() != TroubleTicketStatus.CLOSED) {
             throw new InvalidStatusException("Field 'status' must be 'closed'");
         }
 
-        TroubleTicketEntity ticket = troubleTicketRepository
-                .findByIdAndTenantId(id, tenantId)
-                .orElseThrow(() -> new TicketNotFoundException("Trouble ticket not found: " + id));
-
+        TroubleTicketEntity ticket = findTicket(id);
         ticket.close();
         return toTroubleTicket(troubleTicketRepository.save(ticket));
     }
 
     @Transactional
     public Note addTroubleTicketNote(String id, NoteCreateRequest request) {
-        String tenantId = currentTenant.getTenantId();
-
-        TroubleTicketEntity ticket = troubleTicketRepository
-                .findByIdAndTenantId(id, tenantId)
-                .orElseThrow(() -> new TicketNotFoundException("Ticket not found with id: " + id));
-
+        TroubleTicketEntity ticket = findTicket(id);
         NoteEntity note = ticket.addNote(request.text());
         troubleTicketRepository.save(ticket);
 
         return toNote(note);
+    }
+
+    private TroubleTicketEntity findTicket(String id) {
+        return troubleTicketRepository
+                .findByIdAndTenantId(id, currentTenant.getTenantId())
+                .orElseThrow(() -> new TicketNotFoundException("Trouble ticket not found: " + id));
     }
 
     private TroubleTicket toTroubleTicket(TroubleTicketEntity savedTicket) {

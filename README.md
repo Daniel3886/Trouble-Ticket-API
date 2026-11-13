@@ -203,6 +203,13 @@ W IntelliJ IDEA ten sam format daje wtyczka palantir-java-format (włączona w u
 
 ## Decyzje i założenia
 
+### Model domenowy
+- Modelem domenowym jest encja `TroubleTicketEntity` razem z notatkami (`NoteEntity`). Stan zgłoszenia zmieniają wyłącznie jej metody: konstruktor (nowe zgłoszenie zawsze ma status `new`), `addNote` i `close`.
+- Encje nie mają setterów, a konstruktor bezargumentowy jest `protected` (potrzebuje go tylko JPA). Kod spoza encji nie może więc ustawić dowolnego statusu ani utworzyć niekompletnego zgłoszenia.
+- Notatka powstaje tylko przez `addNote`, więc zawsze należy do swojego zgłoszenia. Nie ma własnego repozytorium: zapisuje się kaskadowo razem ze zgłoszeniem.
+- `TroubleTicketService` koordynuje przypadek użycia: ustala tenanta, wczytuje zgłoszenie, wywołuje metodę encji i mapuje wynik na odpowiedź. Sam nie zmienia pól encji.
+- Rekordy (`TroubleTicketCreateRequest`, `TroubleTicket`, `TroubleTicketSummary`, `Note` itd.) opisują wyłącznie format API: ich nazwy odpowiadają schematom kontraktu i nie zawierają logiki. Kontroler nigdy nie zwraca encji bezpośrednio.
+
 ### Idempotencja tworzenia
 Klucz idempotencji to `(tenantId, externalId)`. Jeśli zgłoszenie już istnieje, API zwraca `200 OK` z aktualną reprezentacją zasobu, bez jego modyfikacji (opis, usługa i notatka z ponowionego żądania są ignorowane). Nowe zgłoszenie zwraca `201 Created`. Nagłówek `Location` jest zwracany w obu przypadkach, zgodnie ze specyfikacją. Serwis zwraca `CreateResult(ticket, created)`, dzięki czemu kontroler wybiera kod odpowiedzi bez dodatkowego zapytania.
 
