@@ -190,6 +190,14 @@ Docker jest potrzebny tylko dla `TroubleTicketApiIntegrationTest`; testy kontrol
 
 Obraz Dockera buduje wyłącznie plik jar poleceniem `./gradlew bootJar`, które nie uruchamia testów. Testy uruchamia się osobno (`./gradlew test`), dzięki czemu `docker compose up --build` pozostaje szybkie.
 
+## CI
+
+`.github/workflows/ci.yml` (GitHub Actions) uruchamia się dla każdego pull requesta i każdego pusha do `main`. Ma dwa niezależne zadania:
+- **Tests and formatting:** `./gradlew check` na Javie 21, czyli wszystkie testy (także integracyjny z Testcontainers, bo runner GitHuba ma Dockera) i kontrola formatowania Spotless. Gdy testy nie przejdą, raport HTML jest dołączany do przebiegu jako artefakt `test-report`.
+- **Docker image builds:** `docker build`, który sprawdza, że obraz z `Dockerfile` nadal się buduje.
+
+Workflow nie wdraża aplikacji ani nie publikuje obrazu: projekt nie ma środowiska docelowego.
+
 ## Styl kodu
 
 Formatowanie wymusza Spotless z palantir-java-format (styl google-java-format, 120 znaków w linii, wcięcie 4 spacje), więc styl nie zależy od ustawień IDE ani od osoby piszącej kod.
