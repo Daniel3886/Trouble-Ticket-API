@@ -14,7 +14,7 @@ record TroubleTicketCreateRequest(
         @NotBlank @Length(min = 1, max = 5000, message = "Description must be between 1 and 5000 characters")
         String description,
 
-        @NotNull TroubleTicketCreateStatus status,
+        @NotNull TroubleTicketStatus status,
 
         @NotBlank @Size(max = 5000, message = "Text must be at most 5000 characters")
         String note) {}

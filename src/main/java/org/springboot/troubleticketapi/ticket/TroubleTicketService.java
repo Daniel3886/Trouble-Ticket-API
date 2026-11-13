@@ -31,8 +31,8 @@ class TroubleTicketService {
     public CreateResult createTroubleTicket(TroubleTicketCreateRequest request) {
         String tenantId = currentTenant.getTenantId();
 
-        if (request.status() != TroubleTicketCreateStatus.NEW) {
-            throw new IllegalArgumentException("New tickets must have status 'new'");
+        if (request.status() != TroubleTicketStatus.NEW) {
+            throw new InvalidStatusException("Field 'status' must be 'new'");
         }
 
         Optional<TroubleTicketEntity> existing =
@@ -82,8 +82,8 @@ class TroubleTicketService {
     public TroubleTicket closeTroubleTicket(String id, TroubleTicketCloseStatusRequest request) {
         String tenantId = currentTenant.getTenantId();
 
-        if (request.status() != TroubleTicketCloseStatus.CLOSED) {
-            throw new IllegalArgumentException("Trouble tickets can only be closed with status 'closed'");
+        if (request.status() != TroubleTicketStatus.CLOSED) {
+            throw new InvalidStatusException("Field 'status' must be 'closed'");
         }
 
         TroubleTicketEntity ticket = troubleTicketRepository

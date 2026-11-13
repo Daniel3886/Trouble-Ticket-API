@@ -5,6 +5,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import org.springboot.troubleticketapi.security.MissingTenantException;
 import org.springboot.troubleticketapi.servicecatalog.ServiceNotFoundException;
+import org.springboot.troubleticketapi.ticket.InvalidStatusException;
 import org.springboot.troubleticketapi.ticket.TicketNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -27,6 +28,11 @@ class GlobalExceptionHandler {
     @ExceptionHandler(ServiceNotFoundException.class)
     public ResponseEntity<Error> handleServiceNotFound(ServiceNotFoundException e, HttpServletRequest request) {
         return error(HttpStatus.NOT_FOUND, "SERVICE_NOT_FOUND", e.getMessage(), request);
+    }
+
+    @ExceptionHandler(InvalidStatusException.class)
+    public ResponseEntity<Error> handleInvalidStatus(InvalidStatusException e, HttpServletRequest request) {
+        return error(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", e.getMessage(), request);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)

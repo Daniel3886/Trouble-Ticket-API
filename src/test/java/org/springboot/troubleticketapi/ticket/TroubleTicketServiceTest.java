@@ -49,7 +49,7 @@ class TroubleTicketServiceTest {
     @Test
     void shouldCreateTicket() {
         TroubleTicketCreateRequest request = new TroubleTicketCreateRequest(
-                "OK-123456", 987654321L, "No data connection", TroubleTicketCreateStatus.NEW, "Initial note");
+                "OK-123456", 987654321L, "No data connection", TroubleTicketStatus.NEW, "Initial note");
 
         when(troubleTicketRepository.findByTenantIdAndExternalId(TENANT_ID, "OK-123456"))
                 .thenReturn(Optional.empty());
@@ -67,13 +67,15 @@ class TroubleTicketServiceTest {
     }
 
     @Test
-    void shouldThrowIllegalArgumentIfStatusIsNull() {
+    void shouldRejectCreateWhenStatusIsNotNew() {
         TroubleTicketCreateRequest request = new TroubleTicketCreateRequest(
-                "49347def-54b1-44b0-890c-0187018f8273", 987654321L, "No data connection", null, "Initial note");
+                "OK-123456", 987654321L, "No data connection", TroubleTicketStatus.RESOLVED, "Initial note");
 
-        assertThrows(IllegalArgumentException.class, () -> troubleTicketService.createTroubleTicket(request));
+        InvalidStatusException exception =
+                assertThrows(InvalidStatusException.class, () -> troubleTicketService.createTroubleTicket(request));
 
-        verify(troubleTicketRepository, never()).save(any(TroubleTicketEntity.class));
+        assertEquals("Field 'status' must be 'new'", exception.getMessage());
+        verifyNoInteractions(troubleTicketRepository, serviceCatalog, ticketPersistence);
     }
 
     @Test
@@ -87,7 +89,7 @@ class TroubleTicketServiceTest {
                 .thenReturn(Optional.of(existing));
 
         TroubleTicketCreateRequest request = new TroubleTicketCreateRequest(
-                "OK-123456", 987654321L, "A different description", TroubleTicketCreateStatus.NEW, "A different note");
+                "OK-123456", 987654321L, "A different description", TroubleTicketStatus.NEW, "A different note");
 
         CreateResult result = troubleTicketService.createTroubleTicket(request);
 
@@ -105,7 +107,7 @@ class TroubleTicketServiceTest {
         when(troubleTicketRepository.findByTenantIdAndExternalId(TENANT_ID, "OK-123456"))
                 .thenReturn(Optional.empty());
         TroubleTicketCreateRequest request = new TroubleTicketCreateRequest(
-                "OK-123456", 987654321L, "No data connection", TroubleTicketCreateStatus.NEW, "Initial note");
+                "OK-123456", 987654321L, "No data connection", TroubleTicketStatus.NEW, "Initial note");
 
         troubleTicketService.createTroubleTicket(request);
 
@@ -129,7 +131,7 @@ class TroubleTicketServiceTest {
                 .requireActiveService(987654321L, TENANT_ID);
 
         TroubleTicketCreateRequest request = new TroubleTicketCreateRequest(
-                "OK-123456", 987654321L, "No data connection", TroubleTicketCreateStatus.NEW, "Initial note");
+                "OK-123456", 987654321L, "No data connection", TroubleTicketStatus.NEW, "Initial note");
 
         assertThrows(ServiceNotFoundException.class, () -> troubleTicketService.createTroubleTicket(request));
 
@@ -226,7 +228,7 @@ class TroubleTicketServiceTest {
         when(troubleTicketRepository.findByIdAndTenantId(TICKET_ID, TENANT_ID)).thenReturn(Optional.of(ticket));
         when(troubleTicketRepository.save(any(TroubleTicketEntity.class))).thenReturn(ticket);
 
-        TroubleTicketCloseStatusRequest request = new TroubleTicketCloseStatusRequest(TroubleTicketCloseStatus.CLOSED);
+        TroubleTicketCloseStatusRequest request = new TroubleTicketCloseStatusRequest(TroubleTicketStatus.CLOSED);
 
         TroubleTicket result = troubleTicketService.closeTroubleTicket(TICKET_ID, request);
 
@@ -238,20 +240,21 @@ class TroubleTicketServiceTest {
     }
 
     @Test
-    void shouldThrowIllegalArgumentWhenCloseStatusIsNull() {
-        TroubleTicketCloseStatusRequest request = new TroubleTicketCloseStatusRequest(null);
+    void shouldRejectCloseWhenStatusIsNotClosed() {
+        TroubleTicketCloseStatusRequest request = new TroubleTicketCloseStatusRequest(TroubleTicketStatus.RESOLVED);
 
-        assertThrows(IllegalArgumentException.class, () -> troubleTicketService.closeTroubleTicket(TICKET_ID, request));
+        InvalidStatusException exception = assertThrows(
+                InvalidStatusException.class, () -> troubleTicketService.closeTroubleTicket(TICKET_ID, request));
 
-        verify(troubleTicketRepository, never()).findByIdAndTenantId(any(), any());
-        verify(troubleTicketRepository, never()).save(any());
+        assertEquals("Field 'status' must be 'closed'", exception.getMessage());
+        verifyNoInteractions(troubleTicketRepository);
     }
 
     @Test
     void shouldThrowTicketNotFoundWhenClosingMissingTicket() {
         when(troubleTicketRepository.findByIdAndTenantId(TICKET_ID, TENANT_ID)).thenReturn(Optional.empty());
 
-        TroubleTicketCloseStatusRequest request = new TroubleTicketCloseStatusRequest(TroubleTicketCloseStatus.CLOSED);
+        TroubleTicketCloseStatusRequest request = new TroubleTicketCloseStatusRequest(TroubleTicketStatus.CLOSED);
 
         assertThrows(TicketNotFoundException.class, () -> troubleTicketService.closeTroubleTicket(TICKET_ID, request));
 
