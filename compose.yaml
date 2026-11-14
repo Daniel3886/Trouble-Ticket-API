@@ -28,3 +28,8 @@ services:
       FLYWAY_LOCATIONS: classpath:db/migration,classpath:db/seed
     ports:
       - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health/readiness || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10

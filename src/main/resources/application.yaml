@@ -23,12 +23,29 @@ spring:
     deserialization:
       fail-on-unknown-properties: true
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include:
+            - readinessState
+            - db
+
+
 logging:
   level:
     org.hibernate.SQL: DEBUG
     org.hibernate.tool.schema: DEBUG
     org.springframework.orm.jpa: INFO
-
+  pattern:
+    level: "%5p [%X{X-Request-ID:-}]"
 app:
   security:
     jwt-secret: ${JWT_SECRET:local-dev-secret-change-me-1234567890}

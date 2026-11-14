@@ -2,7 +2,7 @@
 
 Implementacja backendowa kontraktu `trouble-ticket-api.yaml`
 
-Technologie: Java 21, Spring Boot 4, Spring Security (OAuth2 Resource Server, JWT), Spring Data JPA, Flyway, PostgreSQL 17, Gradle.
+Technologie: Java 21, Spring Boot 4, Spring Security (OAuth2 Resource Server, JWT), Spring Data JPA, Flyway, PostgreSQL 17, Gradle, Spotless (palantir-java-format).
 
 Kontrakt API (źródło prawdy dla implementacji): [`src/main/resources/trouble-ticket-api.yaml`](src/main/resources/trouble-ticket-api.yaml). Plik jest oryginalną specyfikacją z zadania, bez zmian.
 
@@ -18,16 +18,22 @@ Kontrakt API (źródło prawdy dla implementacji): [`src/main/resources/trouble-
 
 ## Struktura projektu
 
+Kod jest podzielony według funkcjonalności biznesowej (package-by-feature), a nie według warstw technicznych.
+Klasa jest `public` tylko wtedy, gdy używa jej kod z innego pakietu; pozostałe są pakietowo-prywatne,
+więc granice między funkcjonalnościami pilnuje kompilator.
+
 ```
 src/main/java/org/springboot/troubleticketapi/
-├── controller/   # TroubleTicketController – warstwa HTTP, kody 200/201, nagłówek Location
-├── service/      # TroubleTicketService – logika biznesowa, idempotencja, izolacja tenantów
-│                 # TicketPersistence – zapis w osobnej transakcji (obsługa wyścigu przy tworzeniu)
-├── repository/   # Spring Data JPA, każde zapytanie o zgłoszenie zawiera tenantId
-├── entity/       # Encje JPA: TroubleTicketEntity, NoteEntity, ServiceEntity
-├── dto/          # Rekordy odpowiadające schematom z kontraktu + enumy statusów
-├── security/     # Konfiguracja JWT, CurrentTenant, RequestIdFilter, błędy 401/403 w formacie Error
-└── exception/    # Wyjątki domenowe i GlobalExceptionHandler (mapowanie na Error)
+├── ticket/           # Zgłoszenia: kontroler, serwis (idempotencja, izolacja tenantów), encje zgłoszenia
+│                     # i notatek, repozytorium, rekordy żądań/odpowiedzi, enum TroubleTicketStatus.
+│                     # Notatka istnieje tylko w ramach zgłoszenia, więc nie ma osobnego pakietu ani repozytorium.
+│                     # Publiczne są tylko wyjątki obsługiwane w common: TicketNotFoundException
+│                     # i InvalidStatusException.
+├── servicecatalog/   # Usługi tenantów (tabela services). Na zewnątrz widoczny tylko ServiceCatalog
+│                     # (requireActiveService) i ServiceNotFoundException; encja i repozytorium są ukryte.
+├── security/         # Konfiguracja JWT, CurrentTenant (tenant z claimu tenant_id), błędy 401/403 w formacie Error
+└── common/           # Elementy wspólne dla wszystkich funkcjonalności: GlobalExceptionHandler,
+                      # rekord Error, enum ErrorCode, RequestIdFilter (nagłówek X-Request-ID)
 
 src/main/resources/
 ├── application.yaml
@@ -35,6 +41,13 @@ src/main/resources/
 └── db/
     ├── migration/            # V1__init_schema.sql – schemat bazy (Flyway)
     └── seed/                 # R__demo_services.sql – usługi demonstracyjne (tylko lokalnie)
+
+src/test/java/org/springboot/troubleticketapi/
+├── TroubleTicketApiIntegrationTest.java   # end-to-end: HTTP + JWT + PostgreSQL (Testcontainers)
+├── ticket/                                # TroubleTicketControllerTest (@WebMvcTest), TroubleTicketServiceTest,
+│                                          # TicketFixtures (wspólne dane testowe)
+└── security/                              # SecurityTestConfig: udostępnia testom HTTP pakietowo-prywatną
+                                           # konfigurację bezpieczeństwa
 
 http/                         # Kolekcja żądań dla IntelliJ HTTP Client + instrukcja
 ```
@@ -51,7 +64,7 @@ docker compose up --build
 
 `compose.yaml` uruchamia dwa serwisy:
 - `postgres`: PostgreSQL 17
-- `app`: obraz budowany z `Dockerfile`. Startuje, dopiero gdy baza jest gotowa.
+- `app`: obraz budowany z `Dockerfile`. Startuje, dopiero gdy baza jest gotowa. Jego `healthcheck` odpytuje `/actuator/health/readiness`, więc `docker compose ps` pokazuje `healthy`, gdy aplikacja może obsługiwać żądania.
 
 API jest dostępne pod `http://localhost:8080`. 
 
@@ -65,7 +78,7 @@ docker compose up -d postgres   # tylko baza
 ./gradlew bootRun               # aplikacja na http://localhost:8080
 ```
 
-Bez pliku `.env` aplikacja uruchomi same migracje schematu, bez usług demonstracyjnych (patrz "Dane startowe"").
+Bez pliku `.env` aplikacja uruchomi same migracje schematu, bez usług demonstracyjnych (patrz "Dane startowe").
 
 Swagger UI: `http://localhost:8080/swagger-ui/index.html`. Dokumentacja w Swagger UI jest generowana przez springdoc z kodu kontrolerów, a nie z pliku kontraktu. Kanonicznym opisem API pozostaje `trouble-ticket-api.yaml`.
 
@@ -116,8 +129,9 @@ Wszystkie endpointy `/api/v1/**` wymagają nagłówka `Authorization: Bearer <JW
 Konfiguracja bezpieczeństwa (`SecurityConfig`):
 - `/api/v1/**`: wymaga poprawnego tokenu JWT,
 - `/swagger-ui/**`, `/v3/api-docs/**`: dostępne bez tokenu (Swagger UI i opis OpenAPI generowany przez springdoc),
-- `/openapi/**`: dopuszczone bez tokenu, ale aplikacja nic pod tym adresem nie udostępnia,
 - `/error`: dostępne bez tokenu (wewnętrzny adres Spring Boota, na który trafiają błędy),
+- `/actuator/health/**`: dostępne bez tokenu (sondy dla Dockera i load balancera, patrz "Monitorowanie"),
+- pozostałe `/actuator/**` (`metrics`, `info`): wymagają poprawnego tokenu JWT,
 - każda inna ścieżka jest zablokowana: bez tokenu `401 UNAUTHORIZED`, z poprawnym tokenem `403 FORBIDDEN`.
 
 API jest bezstanowe (bez sesji, `SessionCreationPolicy.STATELESS`), a ochrona CSRF jest wyłączona,
@@ -131,10 +145,44 @@ Własny token JWT generuje zadanie Gradle:
 
 ```bash
 ./gradlew -q generateToken                                     # tenant-a, ważny 1 h
-./gradlew -q generateToken -Ptenant=tenant-b -PttlSeconds=7200 # tanant-b
+./gradlew -q generateToken -Ptenant=tenant-b -PttlSeconds=7200 # tenant-b
 ```
 
 Zadanie podpisuje token HS256 tym samym sekretem co aplikacja i ustala go w tej samej kolejności: zmienna `JWT_SECRET`, potem plik `.env`, na końcu domyślna wartość lokalna. Token zawiera `sub`, `tenant_id`, `iat` i `exp`.
+
+## Monitorowanie (Spring Boot Actuator)
+
+| Endpoint                     | Token | Do czego służy                                                                                        |
+|------------------------------|-------|-------------------------------------------------------------------------------------------------------|
+| `/actuator/health/liveness`  | nie   | Czy proces działa. Niepowodzenie oznacza: zrestartuj kontener                                         |
+| `/actuator/health/readiness` | nie   | Czy aplikacja może obsługiwać ruch (w tym połączenie z bazą). Niepowodzenie: nie kieruj do niej żądań |
+| `/actuator/health`           | nie   | Stan zbiorczy (`UP`/`DOWN`), bez szczegółów                                                           |
+| `/actuator/metrics`          | tak   | Metryki Micrometer, np. `http.server.requests` (liczba i czas żądań per endpoint)                     |
+| `/actuator/info`             | tak   | Informacje o aplikacji                                                                                |
+
+Decyzje:
+- **Baza tylko w readiness.** Grupa `readiness` zawiera stan bazy (`management.endpoint.health.group.readiness.include: readinessState,db`), a `liveness` nie. Gdy baza nie działa, aplikacja przestaje przyjmować ruch, ale nie jest restartowana: restart aplikacji nie naprawi bazy, a przy wielu instancjach prowadziłby do restartowania wszystkich naraz.
+- **Sondy są publiczne, metryki nie.** Docker i load balancer nie mają tokenu, a odpowiedź sondy zawiera tylko status. Metryki ujawniają nazwy endpointów, użycie pamięci i rozmiar puli połączeń, więc wymagają tokenu.
+- **Bez szczegółów w health.** `show-details` zostaje domyślne (`never`), żeby publiczny endpoint nie pokazywał typu bazy ani ścieżek dysku.
+
+Każda linia logu zapisana w trakcie obsługi żądania zawiera jego `requestId` (`RequestIdFilter` umieszcza go w MDC, wzorzec `logging.pattern.level` go wypisuje), np.:
+
+```
+DEBUG [b5817197-e663-4dac-aa25-08069a528036] ... org.hibernate.SQL : select ...
+```
+
+Ten sam identyfikator klient dostaje w nagłówku `X-Request-ID` i w polu `requestId` błędu, więc zgłoszony problem można odnaleźć w logach.
+
+Sprawdzenie ręczne (aplikacja uruchomiona):
+
+```bash
+curl -i localhost:8080/actuator/health/readiness              # 200 {"status":"UP"}
+curl -i localhost:8080/actuator/metrics                       # 401 UNAUTHORIZED
+TOKEN=$(./gradlew -q generateToken)
+curl -s -H "Authorization: Bearer $TOKEN" localhost:8080/actuator/metrics/http.server.requests
+docker compose stop postgres                                  # readiness: 503 {"status":"DOWN"}, liveness nadal UP
+docker compose start postgres
+```
 
 ## Ręczna weryfikacja API
 
@@ -147,23 +195,64 @@ Szczegóły i tabela oczekiwanych odpowiedzi: [`http/README.md`](http/README.md)
 ## Testy
 
 ```bash
-./gradlew test
+./gradlew test   # wymaga uruchomionego Dockera (Testcontainers)
 ```
 
-- **`TroubleTicketServiceTest`**: testy jednostkowe serwisu (JUnit 5 + Mockito), bez bazy danych. Repozytoria, `TicketPersistence` i `CurrentTenant` są zamockowane. Obejmują:
+Testy są podzielone na trzy poziomy:
+
+- **`TroubleTicketApiIntegrationTest`**: test end-to-end. Prawdziwy serwer HTTP na losowym porcie, prawdziwe bezpieczeństwo (token JWT podpisany tym samym sekretem) i PostgreSQL 17 w kontenerze (Testcontainers) z migracjami Flyway i danymi demonstracyjnymi. Obejmuje:
+  - idempotencję tworzenia (`201`, potem `200` z tym samym `id`),
+  - pełny przebieg: utworzenie, dodanie notatki, zamknięcie,
+  - izolację tenantów (zgłoszenie `tenant-a` niewidoczne dla `tenant-b`),
+  - nieaktywną usługę (`404 SERVICE_NOT_FOUND`) i token bez `tenant_id` (`403 MISSING_TENANT`),
+  - wyścig: 8 równoległych żądań z tym samym `externalId` tworzy dokładnie jedno zgłoszenie,
+  - Actuator: sonda readiness jest dostępna bez tokenu i zwraca `UP`, a `/actuator/metrics` bez tokenu zwraca `401`.
+
+  Test czyta JSON do własnych rekordów zamiast klas produkcyjnych, więc zmiana nazwy pola w odpowiedzi API go zepsuje, tak jak powinna.
+- **`TroubleTicketControllerTest`** (`@WebMvcTest`): warstwa HTTP z zamockowanym serwisem, bez bazy. Sprawdza kody odpowiedzi, nagłówek `Location`, kształt JSON, `401` w formacie `Error`, obsługę błędów (`404`/`405` w formacie `Error`, `409` przy konflikcie wersji, `500` bez treści wewnętrznego wyjątku) oraz walidację: test parametryzowany (`@ParameterizedTest`) przechodzi przez listę niepoprawnych ciał żądania i dla każdego oczekuje `400 VALIDATION_ERROR` z odpowiednim komunikatem.
+- **`TroubleTicketServiceTest`**: testy jednostkowe serwisu (JUnit 5 + Mockito), bez bazy danych. Repozytorium zgłoszeń, `ServiceCatalog` i `CurrentTenant` są zamockowane. Obejmują:
   - tworzenie zgłoszenia i przypisanie tenanta z kontekstu uwierzytelnienia,
   - idempotencję: dla istniejącego `(tenantId, externalId)` zwracane jest istniejące zgłoszenie, bez zapisu i bez nadpisania opisu ani notatek,
-  - odrzucenie brakującego statusu przy tworzeniu i zamykaniu,
+  - odrzucenie niedozwolonego statusu (innego niż `new` przy tworzeniu i `closed` przy zamykaniu),
+  - wyścig przy tworzeniu: gdy zapis trafi na unikalny indeks, zwracane jest zgłoszenie utworzone przez równoległe żądanie (`created = false`),
   - walidację usługi (`ServiceNotFoundException`),
   - listowanie i pobieranie zgłoszeń z filtrem tenanta,
   - zamykanie zgłoszenia i błąd dla nieistniejącego zgłoszenia,
   - dodawanie notatki i zwracanie dokładnie dodanej notatki.
 
-`./gradlew test` uruchamia wyłącznie testy jednostkowe, więc nie wymaga bazy danych ani Dockera.
+Wszystkie testy mają strukturę given/when/then (komentarze oddzielają przygotowanie danych, wywołanie i sprawdzenie). Wspólne dane testowe są w `TicketFixtures` i metodach pomocniczych testu integracyjnego, a sprawdzenia wielu pól naraz używają miękkich asercji (`SoftAssertions`, `andExpectAll`), które raportują wszystkie różnice jednocześnie zamiast zatrzymać się na pierwszej.
+
+Docker jest potrzebny tylko dla `TroubleTicketApiIntegrationTest`; testy kontrolera i serwisu działają bez bazy.
 
 Obraz Dockera buduje wyłącznie plik jar poleceniem `./gradlew bootJar`, które nie uruchamia testów. Testy uruchamia się osobno (`./gradlew test`), dzięki czemu `docker compose up --build` pozostaje szybkie.
 
+## CI
+
+`.github/workflows/ci.yml` (GitHub Actions) uruchamia się dla każdego pull requesta i każdego pusha do `main`. Ma dwa niezależne zadania:
+- **Tests and formatting:** `./gradlew check` na Javie 21, czyli wszystkie testy (także integracyjny z Testcontainers, bo runner GitHuba ma Dockera) i kontrola formatowania Spotless. Gdy testy nie przejdą, raport HTML jest dołączany do przebiegu jako artefakt `test-report`.
+- **Docker image builds:** `docker build`, który sprawdza, że obraz z `Dockerfile` nadal się buduje.
+
+Workflow nie wdraża aplikacji ani nie publikuje obrazu: projekt nie ma środowiska docelowego.
+
+## Styl kodu
+
+Formatowanie wymusza Spotless z palantir-java-format (styl google-java-format, 120 znaków w linii, wcięcie 4 spacje), więc styl nie zależy od ustawień IDE ani od osoby piszącej kod.
+
+```bash
+./gradlew spotlessApply   # formatuje kod
+./gradlew check           # testy + kontrola formatowania; niesformatowany kod kończy się błędem
+```
+
+W IntelliJ IDEA ten sam format daje wtyczka palantir-java-format (włączona w ustawieniach wtyczki), dzięki czemu skrót formatowania w IDE i Spotless dają identyczny wynik.
+
 ## Decyzje i założenia
+
+### Model domenowy
+- Modelem domenowym jest encja `TroubleTicketEntity` razem z notatkami (`NoteEntity`). Stan zgłoszenia zmieniają wyłącznie jej metody: konstruktor (nowe zgłoszenie zawsze ma status `new`), `addNote` i `close`.
+- Encje nie mają setterów, a konstruktor bezargumentowy jest `protected` (potrzebuje go tylko JPA). Kod spoza encji nie może więc ustawić dowolnego statusu ani utworzyć niekompletnego zgłoszenia.
+- Notatka powstaje tylko przez `addNote`, więc zawsze należy do swojego zgłoszenia. Nie ma własnego repozytorium: zapisuje się kaskadowo razem ze zgłoszeniem.
+- `TroubleTicketService` koordynuje przypadek użycia: ustala tenanta, wczytuje zgłoszenie, wywołuje metodę encji i mapuje wynik na odpowiedź. Sam nie zmienia pól encji.
+- Rekordy (`TroubleTicketCreateRequest`, `TroubleTicket`, `TroubleTicketSummary`, `Note` itd.) opisują wyłącznie format API: ich nazwy odpowiadają schematom kontraktu i nie zawierają logiki. Kontroler nigdy nie zwraca encji bezpośrednio.
 
 ### Idempotencja tworzenia
 Klucz idempotencji to `(tenantId, externalId)`. Jeśli zgłoszenie już istnieje, API zwraca `200 OK` z aktualną reprezentacją zasobu, bez jego modyfikacji (opis, usługa i notatka z ponowionego żądania są ignorowane). Nowe zgłoszenie zwraca `201 Created`. Nagłówek `Location` jest zwracany w obu przypadkach, zgodnie ze specyfikacją. Serwis zwraca `CreateResult(ticket, created)`, dzięki czemu kontroler wybiera kod odpowiedzi bez dodatkowego zapytania.
@@ -174,7 +263,7 @@ Unikalność jest wymuszona także w bazie (`unique_tenant_external_id`).
 Tenant wynika wyłącznie z claimu `tenant_id` zweryfikowanego tokenu, nigdy z parametrów żądania. Każde zapytanie o zgłoszenia zawiera `tenantId`. Zgłoszenie innego tenanta jest traktowane jak nieistniejące i zwraca `404 TROUBLE_TICKET_NOT_FOUND`, żeby nie ujawniać istnienia zasobu.
 
 ### Walidacja usługi (`SERVICE_NOT_FOUND`)
-Specyfikacja wymaga `404 SERVICE_NOT_FOUND`, gdy usługa nie istnieje, nie jest aktywna albo nie należy do tenanta. Projekt nie ma dostępu do zewnętrznego katalogu usług, dlatego przyjąłem uproszczenie: tabela `services` (`id`, `tenant_id`, `active`) w tej samej bazie, sprawdzana przez `ServiceRepository`.
+Specyfikacja wymaga `404 SERVICE_NOT_FOUND`, gdy usługa nie istnieje, nie jest aktywna albo nie należy do tenanta. Projekt nie ma dostępu do zewnętrznego katalogu usług, dlatego przyjąłem uproszczenie: tabela `services` (`id`, `tenant_id`, `active`) w tej samej bazie, sprawdzana przez `ServiceCatalog.requireActiveService` (pakiet `servicecatalog`).
 
 Kolejność kroków przy tworzeniu: walidacja żądania (400), wyszukanie istniejącego zgłoszenia (200), walidacja usługi (404), zapis (201). Sprawdzenie usługi następuje celowo po wyszukaniu idempotentnym: ponowienie żądania dla istniejącego zgłoszenia powinno zwrócić `200`, nawet jeśli usługa została w międzyczasie dezaktywowana.
 
@@ -183,7 +272,8 @@ Uproszczenie: `services.id` jest samodzielnym kluczem głównym, więc ten sam i
 ### Statusy
 - Tworzenie przyjmuje tylko `new`. Inna wartość lub jej brak to `400`.
 - PATCH przyjmuje tylko `closed`. Inna wartość lub jej brak to `400`.
-- Dozwolone wartości są wymuszone już na etapie deserializacji (osobne enumy `TroubleTicketCreateStatus` i `TroubleTicketCloseStatus`), a serwis sprawdza je ponownie jako zabezpieczenie.
+- W kodzie jest jeden enum `TroubleTicketStatus` z pełnym cyklem życia zgłoszenia. Kontrakt definiuje osobne schematy `TroubleTicketCreateStatus` i `TroubleTicketCloseStatus`, ale to ograniczenia wejścia poszczególnych endpointów, a nie osobne rodzaje statusu. Odwzorowanie ich trzema enumami dublowało kod (`@JsonCreator`/`@JsonValue`) i powodowało, że sprawdzenia w serwisie nigdy nie mogły się nie powieść.
+- Wartość spoza enuma (np. `"foo"`) odrzuca deserializacja (`Field 'status' has an invalid value`). Poprawny status, który nie jest dozwolony w danym endpoincie (np. `"resolved"` przy tworzeniu), odrzuca serwis wyjątkiem `InvalidStatusException` (`Field 'status' must be 'new'` / `must be 'closed'`). Oba przypadki dają `400 VALIDATION_ERROR`.
 - Specyfikacja dopuszcza, że nowe zgłoszenie od razu ma status `acknowledged` (przetwarzanie po stronie Systemu Obsługi Zgłoszeń). Ta implementacja nie symuluje SOZ, więc nowe zgłoszenie ma status `new`. Pozostałe statusy (`acknowledged`, `inProgress`, `resolved`, `rejected`) istnieją w modelu, ale w v1 ustawiałby je tylko proces wewnętrzny, poza publicznym API.
 - Zamknięcie jest dozwolone z każdego statusu. Zamknięcie już zamkniętego zgłoszenia jest idempotentne i zwraca `200`. Kontrakt nie określa reguł przejść dla statusu źródłowego (np. czy można zamknąć `rejected`) przyjąłem, że ograniczenie dotyczy wyłącznie statusu docelowego.
 
@@ -202,20 +292,29 @@ Błędy obsługiwane przez aplikację mają format `Error` (`code`, `message`, `
 | Poprawny token, ale ścieżka spoza `/api/v1` i dokumentacji        | 403    | `FORBIDDEN`                |
 | Zgłoszenie nie istnieje lub należy do innego tenanta              | 404    | `TROUBLE_TICKET_NOT_FOUND` |
 | Usługa nie istnieje, jest nieaktywna lub należy do innego tenanta | 404    | `SERVICE_NOT_FOUND`        |
+| Nieznana ścieżka w `/api/v1` (z poprawnym tokenem)                | 404    | `NOT_FOUND`                |
+| Niedozwolona metoda HTTP (np. `DELETE`)                           | 405    | `METHOD_NOT_ALLOWED`       |
+| Równoległa modyfikacja tego samego zgłoszenia (`@Version`)        | 409    | `CONFLICT`                 |
+| Nagłówek `Content-Type` inny niż JSON                             | 415    | `UNSUPPORTED_MEDIA_TYPE`   |
+| Nieoczekiwany błąd                                                | 500    | `INTERNAL_ERROR`           |
 
-Kontrakt definiuje kody `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `SERVICE_NOT_FOUND` i `TROUBLE_TICKET_NOT_FOUND`. Kod `MISSING_TENANT` nie występuje w kontrakcie (najbliższy odpowiednik to `FORBIDDEN`).
+Wszystkie kody, ich status HTTP i domyślny komunikat są zdefiniowane w jednym miejscu, w enumie `ErrorCode`, którego używają zarówno `GlobalExceptionHandler`, jak i obsługa błędów 401/403 (`JsonSecurityErrorHandler`). Kontrakt definiuje kody `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `SERVICE_NOT_FOUND` i `TROUBLE_TICKET_NOT_FOUND`. Pozostałe opisują sytuacje, których kontrakt nie obejmuje. `MISSING_TENANT` jest bliższym odpowiednikiem `FORBIDDEN`, a reszta zastępuje domyślny format Spring Boota, żeby każda odpowiedź błędu miała kształt `Error` i `requestId`.
 
-Ciało żądania, którego nie da się odczytać (`HttpMessageNotReadableException`: niedozwolony status, nieznane pole, zły typ, błędny JSON), zwraca `400 VALIDATION_ERROR`. Komunikat wskazuje wyłącznie nazwę pola (np. `Field 'status' has an invalid value`), a nie oryginalny komunikat Jacksona, który ujawniałby nazwy klas.
+Ciało żądania, którego nie da się odczytać (`HttpMessageNotReadableException`: nieznana wartość statusu, nieznane pole, zły typ, błędny JSON), zwraca `400 VALIDATION_ERROR`. Komunikat wskazuje wyłącznie nazwę pola (np. `Field 'status' has an invalid value`), a nie oryginalny komunikat Jacksona, który ujawniałby nazwy klas.
 
-`GlobalExceptionHandler` zawiera też obsługę `IllegalArgumentException` (`400 ILLEGAL_ARGUMENT`) dla ponownego sprawdzenia statusu w serwisie. Przez HTTP ten przypadek nie występuje, ponieważ niedozwolony status jest odrzucany już przy deserializacji.
+Niedozwolony status zgłasza serwis wyjątkiem `InvalidStatusException`, który `GlobalExceptionHandler` mapuje na `400 VALIDATION_ERROR`, tak samo jak pozostałe błędy walidacji.
 
-Pozostałe błędy (nieznana ścieżka, niedozwolona metoda HTTP, nieoczekiwany błąd serwera) nie są obsługiwane osobno i zwracają domyślną odpowiedź Spring Boota z odpowiednim kodem HTTP.
+Klient dostaje treść komunikatu wyjątku tylko dla wyjątków aplikacji (`TicketNotFoundException`, `ServiceNotFoundException`, `InvalidStatusException`, `MissingTenantException`). Ich komunikaty powtarzają jedynie to, co przysłał klient (np. `id`), więc niczego nie ujawniają. Wszystkie inne wyjątki dostają stały komunikat z `ErrorCode`:
+- Błędy samego Springa MVC (nieznana ścieżka, niedozwolona metoda, zły `Content-Type`) zachowują swój kod HTTP (`404`, `405`, `415`).
+- Każdy inny wyjątek to błąd programu: jego szczegóły (komunikat i stack trace) trafiają do logu razem z `requestId`, a klient dostaje `500 INTERNAL_ERROR` z ogólnym komunikatem i tym samym `requestId`, który może podać przy zgłaszaniu problemu. Komunikat wyjątku może pochodzić z biblioteki (np. fragment SQL), więc nigdy nie jest zwracany klientowi.
+
+Wcześniejsza wersja zwracała komunikat każdego `IllegalArgumentException` jako `400 ILLEGAL_ARGUMENT`, a pozostałe błędy w domyślnym formacie Spring Boota.
 
 Błędy 401 i 403 powstają w łańcuchu filtrów Spring Security, przed kontrolerem, dlatego obsługują je `AuthenticationEntryPoint` i `AccessDeniedHandler` (`JsonSecurityErrorHandler`), a nie `@RestControllerAdvice`. Wyjątkiem jest `MISSING_TENANT`: brak `tenant_id` wykrywa dopiero `CurrentTenant` w serwisie, a `403` zwraca `GlobalExceptionHandler`.
 
 Token poprawnie podpisany, ale bez `tenant_id`, traktuję jako brak uprawnień (`403`): tożsamość jest zweryfikowana, ale nie da się ustalić zakresu danych.
 
-Każde żądanie otrzymuje UUID (`RequestIdFilter`, uruchamiany przed uwierzytelnieniem), zwracany jako `requestId` w obiekcie `Error` oraz w nagłówku `X-Request-ID` każdej odpowiedzi.
+Każde żądanie otrzymuje UUID (`RequestIdFilter`, uruchamiany przed uwierzytelnieniem), zwracany jako `requestId` w obiekcie `Error` oraz w nagłówku `X-Request-ID` każdej odpowiedzi. Ten sam identyfikator trafia do każdej linii logu tego żądania (MDC, patrz "Monitorowanie").
 
 ### `additionalProperties: false`
 Specyfikacja zabrania nieznanych pól, a Spring Boot domyślnie je ignoruje. Włączono `spring.jackson.deserialization.fail-on-unknown-properties=true`, więc nieznane pole w żądaniu daje `400 VALIDATION_ERROR` w formacie `Error`.
@@ -227,9 +326,16 @@ Specyfikacja nie podaje maksymalnej długości tekstów. Kolumny `description` i
 Notatki są zwracane w kolejności utworzenia (`@OrderBy("date ASC")`), więc notatka z żądania utworzenia jest zawsze pierwszym elementem `notes`, zgodnie z kontraktem. Endpoint dodawania notatki zwraca dokładnie tę notatkę, którą utworzyło żądanie (obiekt zwrócony przez `addNote`), a nie ostatni element listy. Notatka nie zmienia statusu zgłoszenia. Notatki można dodawać również do zamkniętego zgłoszenia, ponieważ kontrakt tego nie zabrania.
 
 ### Współbieżność
-Przy równoległym tworzeniu tego samego `(tenantId, externalId)` unikalny indeks jest ostatecznym zabezpieczeniem. Zapis odbywa się w osobnej transakcji (`TicketPersistence`, `REQUIRES_NEW`), dzięki czemu konflikt `DataIntegrityViolationException` nie oznacza głównej transakcji jako rollback-only. Wyjątek jest przechwytywany, a istniejące zgłoszenie jest odczytywane i zwracane jako `200 OK`. Kosztem jest drugie połączenie z puli na czas zapisu.
+Przy równoległym tworzeniu tego samego `(tenantId, externalId)` oba żądania mogą nie znaleźć zgłoszenia i oba spróbować je zapisać. Ostatecznym zabezpieczeniem jest unikalny indeks: drugi `INSERT` kończy się `DataIntegrityViolationException`, które serwis przechwytuje, a następnie odczytuje i zwraca zgłoszenie utworzone przez pierwsze żądanie (`200 OK`).
 
-Encja zgłoszenia ma pole `@Version` (blokowanie optymistyczne), które chroni przed nadpisaniem zmian przez równoległe transakcje. API nie udostępnia wersji klientowi (brak `ETag` / `If-Match`), a konflikt nie jest mapowany na `409`.
+`createTroubleTicket` celowo nie jest oznaczony `@Transactional`. Każde wywołanie repozytorium działa we własnej krótkiej transakcji, więc nieudany zapis wycofuje tylko swoją transakcję, a ponowny odczyt startuje w nowej. Wewnątrz jednej transakcji PostgreSQL po błędzie odrzuca kolejne zapytania („current transaction is aborted”), więc odczyt w bloku `catch` zakończyłby się błędem `500`.
+- Zapis używa `saveAndFlush`, żeby `INSERT` trafił do bazy od razu i ewentualny błąd unikalności pojawił się wewnątrz `try`.
+- Odczytane zgłoszenie jest już odłączone od sesji, dlatego `findByTenantIdAndExternalId` ładuje notatki tym samym zapytaniem (`@EntityGraph(attributePaths = "notes")`). Bez tego odwołanie do leniwie ładowanej listy notatek kończyłoby się `LazyInitializationException`.
+- Wcześniejsza wersja zapisywała zgłoszenie w osobnej transakcji (`REQUIRES_NEW`), co wymagało dodatkowej klasy i dwóch połączeń z puli na jedno żądanie.
+
+Zachowanie sprawdza test integracyjny, który wysyła 8 równoległych żądań z tym samym `externalId` i oczekuje dokładnie jednego `201`.
+
+Encja zgłoszenia ma pole `@Version` (blokowanie optymistyczne), które chroni przed nadpisaniem zmian przez równoległe transakcje. Konflikt (`OptimisticLockingFailureException`) zwraca `409 CONFLICT`, a klient może ponowić żądanie. API nie udostępnia wersji klientowi (brak `ETag` / `If-Match`), więc chroni tylko przed równoległym zapisem, nie przed nadpisaniem zmian, które klient wcześniej odczytał.
 
 ### Uwierzytelnianie
 Tokeny są weryfikowane współdzielonym sekretem HS256. To uproszczenie na potrzeby zadania.
@@ -242,7 +348,7 @@ Zgodnie ze specyfikacją lista zgłoszeń nie wspiera paginacji ani filtrowania.
 - **Ważność tokenu:** walidator JWT sprawdza `exp` i `nbf` tylko wtedy, gdy są obecne. Token bez `exp` jest akceptowany bezterminowo.
 - **Schemat bazy:** migracje Flyway są uruchamiane przy starcie aplikacji. Przy wielu instancjach lub dużych migracjach lepiej uruchamiać je osobnym krokiem wdrożenia.
 - **Katalog usług:** tabela `services` jest minimalnym substytutem zewnętrznego katalogu. Nie ma endpointu do zarządzania usługami.
-- **Testy:** brak automatycznych testów warstwy HTTP (kody odpowiedzi, `Location`, 401/403, format `Error`) i testów z prawdziwą bazą (unikalny indeks, wyścig przy tworzeniu). Zachowania HTTP sprawdza ręcznie uruchamiana kolekcja `http/`, ale nie są one chronione w `./gradlew test`.
-- **Format błędów spoza kontraktu:** błędy, których kontrakt nie opisuje (`404` dla nieznanej ścieżki, `405`, `500`), zwracają domyślny format Spring Boota, a nie `Error`, i nie zawierają `requestId` w treści (jest tylko w nagłówku `X-Request-ID`).
-- **Konflikty wersji:** równoległa modyfikacja tego samego zgłoszenia (`@Version`) kończy się `500`, kontrakt nie przewiduje `409 Conflict`.
-- **Logowanie:** konfiguracja lokalna loguje wszystkie zapytania SQL (`show-sql`, `org.hibernate.SQL: DEBUG`). Brak metryk i logowania.
+- **Kody spoza kontraktu:** `NOT_FOUND`, `METHOD_NOT_ALLOWED`, `CONFLICT`, `UNSUPPORTED_MEDIA_TYPE` i `INTERNAL_ERROR` nie występują w kontrakcie. Klient napisany ściśle według specyfikacji może ich nie rozpoznawać.
+- **Konfiguracja:** `application.yaml` ma domyślne wartości `JWT_SECRET` i `POSTGRES_PASSWORD` przeznaczone do lokalnego uruchomienia. Wdrożenie musi je nadpisać zmiennymi środowiskowymi.
+- **Logowanie:** konfiguracja loguje wszystkie zapytania SQL (`show-sql`, `org.hibernate.SQL: DEBUG`), co jest wygodne lokalnie, ale zbyt obszerne dla produkcji.
+- **Metryki:** są dostępne przez `/actuator/metrics`, ale nie są eksportowane do systemu monitoringu (np. Prometheus). Wymagałoby to dodatkowej zależności (`micrometer-registry-prometheus`) i miejsca, które je zbiera.
