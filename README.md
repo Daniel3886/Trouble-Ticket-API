@@ -64,7 +64,7 @@ docker compose up --build
 
 `compose.yaml` uruchamia dwa serwisy:
 - `postgres`: PostgreSQL 17
-- `app`: obraz budowany z `Dockerfile`. Startuje, dopiero gdy baza jest gotowa.
+- `app`: obraz budowany z `Dockerfile`. Startuje, dopiero gdy baza jest gotowa. Jego `healthcheck` odpytuje `/actuator/health/readiness`, więc `docker compose ps` pokazuje `healthy`, gdy aplikacja może obsługiwać żądania.
 
 API jest dostępne pod `http://localhost:8080`. 
 
@@ -129,8 +129,9 @@ Wszystkie endpointy `/api/v1/**` wymagają nagłówka `Authorization: Bearer <JW
 Konfiguracja bezpieczeństwa (`SecurityConfig`):
 - `/api/v1/**`: wymaga poprawnego tokenu JWT,
 - `/swagger-ui/**`, `/v3/api-docs/**`: dostępne bez tokenu (Swagger UI i opis OpenAPI generowany przez springdoc),
-- `/openapi/**`: dopuszczone bez tokenu, ale aplikacja nic pod tym adresem nie udostępnia,
 - `/error`: dostępne bez tokenu (wewnętrzny adres Spring Boota, na który trafiają błędy),
+- `/actuator/health/**`: dostępne bez tokenu (sondy dla Dockera i load balancera, patrz "Monitorowanie"),
+- pozostałe `/actuator/**` (`metrics`, `info`): wymagają poprawnego tokenu JWT,
 - każda inna ścieżka jest zablokowana: bez tokenu `401 UNAUTHORIZED`, z poprawnym tokenem `403 FORBIDDEN`.
 
 API jest bezstanowe (bez sesji, `SessionCreationPolicy.STATELESS`), a ochrona CSRF jest wyłączona,
@@ -148,6 +149,40 @@ Własny token JWT generuje zadanie Gradle:
 ```
 
 Zadanie podpisuje token HS256 tym samym sekretem co aplikacja i ustala go w tej samej kolejności: zmienna `JWT_SECRET`, potem plik `.env`, na końcu domyślna wartość lokalna. Token zawiera `sub`, `tenant_id`, `iat` i `exp`.
+
+## Monitorowanie (Spring Boot Actuator)
+
+| Endpoint                     | Token | Do czego służy                                                                                        |
+|------------------------------|-------|-------------------------------------------------------------------------------------------------------|
+| `/actuator/health/liveness`  | nie   | Czy proces działa. Niepowodzenie oznacza: zrestartuj kontener                                         |
+| `/actuator/health/readiness` | nie   | Czy aplikacja może obsługiwać ruch (w tym połączenie z bazą). Niepowodzenie: nie kieruj do niej żądań |
+| `/actuator/health`           | nie   | Stan zbiorczy (`UP`/`DOWN`), bez szczegółów                                                           |
+| `/actuator/metrics`          | tak   | Metryki Micrometer, np. `http.server.requests` (liczba i czas żądań per endpoint)                     |
+| `/actuator/info`             | tak   | Informacje o aplikacji                                                                                |
+
+Decyzje:
+- **Baza tylko w readiness.** Grupa `readiness` zawiera stan bazy (`management.endpoint.health.group.readiness.include: readinessState,db`), a `liveness` nie. Gdy baza nie działa, aplikacja przestaje przyjmować ruch, ale nie jest restartowana: restart aplikacji nie naprawi bazy, a przy wielu instancjach prowadziłby do restartowania wszystkich naraz.
+- **Sondy są publiczne, metryki nie.** Docker i load balancer nie mają tokenu, a odpowiedź sondy zawiera tylko status. Metryki ujawniają nazwy endpointów, użycie pamięci i rozmiar puli połączeń, więc wymagają tokenu.
+- **Bez szczegółów w health.** `show-details` zostaje domyślne (`never`), żeby publiczny endpoint nie pokazywał typu bazy ani ścieżek dysku.
+
+Każda linia logu zapisana w trakcie obsługi żądania zawiera jego `requestId` (`RequestIdFilter` umieszcza go w MDC, wzorzec `logging.pattern.level` go wypisuje), np.:
+
+```
+DEBUG [b5817197-e663-4dac-aa25-08069a528036] ... org.hibernate.SQL : select ...
+```
+
+Ten sam identyfikator klient dostaje w nagłówku `X-Request-ID` i w polu `requestId` błędu, więc zgłoszony problem można odnaleźć w logach.
+
+Sprawdzenie ręczne (aplikacja uruchomiona):
+
+```bash
+curl -i localhost:8080/actuator/health/readiness              # 200 {"status":"UP"}
+curl -i localhost:8080/actuator/metrics                       # 401 UNAUTHORIZED
+TOKEN=$(./gradlew -q generateToken)
+curl -s -H "Authorization: Bearer $TOKEN" localhost:8080/actuator/metrics/http.server.requests
+docker compose stop postgres                                  # readiness: 503 {"status":"DOWN"}, liveness nadal UP
+docker compose start postgres
+```
 
 ## Ręczna weryfikacja API
 
@@ -170,7 +205,8 @@ Testy są podzielone na trzy poziomy:
   - pełny przebieg: utworzenie, dodanie notatki, zamknięcie,
   - izolację tenantów (zgłoszenie `tenant-a` niewidoczne dla `tenant-b`),
   - nieaktywną usługę (`404 SERVICE_NOT_FOUND`) i token bez `tenant_id` (`403 MISSING_TENANT`),
-  - wyścig: 8 równoległych żądań z tym samym `externalId` tworzy dokładnie jedno zgłoszenie.
+  - wyścig: 8 równoległych żądań z tym samym `externalId` tworzy dokładnie jedno zgłoszenie,
+  - Actuator: sonda readiness jest dostępna bez tokenu i zwraca `UP`, a `/actuator/metrics` bez tokenu zwraca `401`.
 
   Test czyta JSON do własnych rekordów zamiast klas produkcyjnych, więc zmiana nazwy pola w odpowiedzi API go zepsuje, tak jak powinna.
 - **`TroubleTicketControllerTest`** (`@WebMvcTest`): warstwa HTTP z zamockowanym serwisem, bez bazy. Sprawdza kody odpowiedzi, nagłówek `Location`, kształt JSON, `401` w formacie `Error`, obsługę błędów (`404`/`405` w formacie `Error`, `409` przy konflikcie wersji, `500` bez treści wewnętrznego wyjątku) oraz walidację: test parametryzowany (`@ParameterizedTest`) przechodzi przez listę niepoprawnych ciał żądania i dla każdego oczekuje `400 VALIDATION_ERROR` z odpowiednim komunikatem.
@@ -278,7 +314,7 @@ Błędy 401 i 403 powstają w łańcuchu filtrów Spring Security, przed kontrol
 
 Token poprawnie podpisany, ale bez `tenant_id`, traktuję jako brak uprawnień (`403`): tożsamość jest zweryfikowana, ale nie da się ustalić zakresu danych.
 
-Każde żądanie otrzymuje UUID (`RequestIdFilter`, uruchamiany przed uwierzytelnieniem), zwracany jako `requestId` w obiekcie `Error` oraz w nagłówku `X-Request-ID` każdej odpowiedzi.
+Każde żądanie otrzymuje UUID (`RequestIdFilter`, uruchamiany przed uwierzytelnieniem), zwracany jako `requestId` w obiekcie `Error` oraz w nagłówku `X-Request-ID` każdej odpowiedzi. Ten sam identyfikator trafia do każdej linii logu tego żądania (MDC, patrz "Monitorowanie").
 
 ### `additionalProperties: false`
 Specyfikacja zabrania nieznanych pól, a Spring Boot domyślnie je ignoruje. Włączono `spring.jackson.deserialization.fail-on-unknown-properties=true`, więc nieznane pole w żądaniu daje `400 VALIDATION_ERROR` w formacie `Error`.
@@ -314,4 +350,5 @@ Zgodnie ze specyfikacją lista zgłoszeń nie wspiera paginacji ani filtrowania.
 - **Katalog usług:** tabela `services` jest minimalnym substytutem zewnętrznego katalogu. Nie ma endpointu do zarządzania usługami.
 - **Kody spoza kontraktu:** `NOT_FOUND`, `METHOD_NOT_ALLOWED`, `CONFLICT`, `UNSUPPORTED_MEDIA_TYPE` i `INTERNAL_ERROR` nie występują w kontrakcie. Klient napisany ściśle według specyfikacji może ich nie rozpoznawać.
 - **Konfiguracja:** `application.yaml` ma domyślne wartości `JWT_SECRET` i `POSTGRES_PASSWORD` przeznaczone do lokalnego uruchomienia. Wdrożenie musi je nadpisać zmiennymi środowiskowymi.
-- **Obserwowalność:** konfiguracja loguje wszystkie zapytania SQL (`show-sql`, `org.hibernate.SQL: DEBUG`). Brak metryk, endpointów health (liveness/readiness) i `requestId` w logach (MDC).
+- **Logowanie:** konfiguracja loguje wszystkie zapytania SQL (`show-sql`, `org.hibernate.SQL: DEBUG`), co jest wygodne lokalnie, ale zbyt obszerne dla produkcji.
+- **Metryki:** są dostępne przez `/actuator/metrics`, ale nie są eksportowane do systemu monitoringu (np. Prometheus). Wymagałoby to dodatkowej zależności (`micrometer-registry-prometheus`) i miejsca, które je zbiera.
