@@ -27,10 +27,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import org.springframework.web.server.ResponseStatusException;
 
 @WebMvcTest(TroubleTicketController.class)
 @Import(SecurityTestConfig.class)
@@ -198,6 +200,20 @@ class TroubleTicketControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"status\":\"closed\"}"))
                 .andExpectAll(status().isConflict(), jsonPath("$.code").value("CONFLICT"));
+    }
+
+    @Test
+    void springServerErrorIsNotReportedAsClientError() throws Exception {
+        // given: a Spring web exception that carries a 5xx status
+        given(troubleTicketService.getTroubleTicketById("any"))
+                .willThrow(new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "internal detail"));
+
+        // when / then
+        mockMvc.perform(get(URL + "/any").with(tenantA()))
+                .andExpectAll(
+                        status().isInternalServerError(),
+                        jsonPath("$.code").value("INTERNAL_ERROR"),
+                        jsonPath("$.message", not(containsString("internal detail"))));
     }
 
     @Test

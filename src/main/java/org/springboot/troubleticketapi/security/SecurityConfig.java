@@ -33,14 +33,15 @@ class SecurityConfig {
             HttpSecurity http, RequestIdFilter requestIdFilter, JsonSecurityErrorHandler errorHandler) {
         http.csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth.requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/openapi/**")
-                        .permitAll()
-                        .requestMatchers("/error")
-                        .permitAll()
-                        .requestMatchers("/api/v1/**")
-                        .authenticated()
-                        .anyRequest()
-                        .denyAll())
+                .authorizeHttpRequests(
+                        auth -> auth.requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/actuator/health/**")
+                                .permitAll()
+                                .requestMatchers("/error")
+                                .permitAll()
+                                .requestMatchers("/api/v1/**", "/actuator/**")
+                                .authenticated()
+                                .anyRequest()
+                                .denyAll())
                 .exceptionHandling(errors -> errors.authenticationEntryPoint(((request, response, authException) ->
                                 errorHandler.write(request, response, ErrorCode.UNAUTHORIZED)))
                         .accessDeniedHandler((request, response, exception) ->

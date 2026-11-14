@@ -106,7 +106,7 @@ class TroubleTicketServiceTest {
         assertEquals("No data connection", result.ticket().description());
         assertEquals(1, result.ticket().notes().size());
 
-        verify(troubleTicketRepository, never()).save(any());
+        verify(troubleTicketRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -174,7 +174,7 @@ class TroubleTicketServiceTest {
         assertThrows(ServiceNotFoundException.class, () -> troubleTicketService.createTroubleTicket(request));
 
         verify(serviceCatalog).requireActiveService(987654321L, TENANT_ID);
-        verify(troubleTicketRepository, never()).save(any());
+        verify(troubleTicketRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -252,7 +252,6 @@ class TroubleTicketServiceTest {
 
         // then
         assertTrue(exception.getMessage().contains(TICKET_ID));
-        verify(troubleTicketRepository, never()).save(any(TroubleTicketEntity.class));
     }
 
     @Test

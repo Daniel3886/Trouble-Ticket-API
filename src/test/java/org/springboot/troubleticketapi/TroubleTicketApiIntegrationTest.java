@@ -207,6 +207,31 @@ class TroubleTicketApiIntegrationTest {
         assertThat(statuses).filteredOn(status -> status == 201).hasSize(1);
     }
 
+    @Test
+    void readinessProbeIsPublicAndUp() {
+        // when, then: no Authorization header
+        actuator()
+                .get()
+                .uri("/health/readiness")
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectBody()
+                .jsonPath("$.status")
+                .isEqualTo("UP");
+    }
+
+    @Test
+    void metricsWithoutTokenReturns401() {
+        actuator().get().uri("/metrics").exchange().expectStatus().isEqualTo(401);
+    }
+
+    private RestTestClient actuator() {
+        return RestTestClient.bindToServer()
+                .baseUrl("http://localhost:" + port + "/actuator")
+                .build();
+    }
+
     private TicketJson postTicket(String body, int expectedStatus) {
         return client.post()
                 .header("Authorization", bearer("tenant-a"))

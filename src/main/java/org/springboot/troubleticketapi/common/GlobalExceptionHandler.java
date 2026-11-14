@@ -64,7 +64,8 @@ class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Error> handleUnexpected(Exception e, HttpServletRequest request) {
-        if (e instanceof ErrorResponse springError) {
+        if (e instanceof ErrorResponse springError
+                && springError.getStatusCode().is4xxClientError()) {
             ErrorCode code = switch (springError.getStatusCode().value()) {
                 case 404 -> ErrorCode.NOT_FOUND;
                 case 405 -> ErrorCode.METHOD_NOT_ALLOWED;
